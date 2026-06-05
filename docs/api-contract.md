@@ -121,6 +121,7 @@ Rules:
 ## API Surface
 
 - `GET /api/projects/{projectId}`
+- `GET /api/projects/{projectId}/chapters`
 - `GET /api/projects/{projectId}/outline`
 - `GET /api/projects/{projectId}/scenes`
 - `GET /api/projects/{projectId}/scenes/{sceneId}`
@@ -128,6 +129,12 @@ Rules:
 - `POST /api/projects/{projectId}/validate`
 - `GET /api/projects/{projectId}/export?format=yaml`
 - `GET /api/projects/{projectId}/events`
+
+## Current Integration Status
+
+- 已在 `main` 真实接入：`GET /api/projects/{projectId}`、`GET /api/projects/{projectId}/chapters`
+- 当前仍使用 mock 的区域：`outline`、`scene detail`、`validation`、`yaml export preview`、`events`
+- 第一阶段策略：真实接项目和章节，场景与导出继续使用 mock，避免阻塞 A/B 并行开发
 
 ## Compatibility Rules
 
