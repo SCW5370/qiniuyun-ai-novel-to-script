@@ -1,0 +1,53 @@
+[
+  {
+    "sceneId": "S001",
+    "seqNo": 1,
+    "title": "雨夜闯店",
+    "slugline": {
+      "intExt": "INT",
+      "locationId": "L001",
+      "timeOfDay": "NIGHT"
+    },
+    "purpose": {
+      "plot": "建立主角与旧书店的首次连接",
+      "character": "展示林舟的狼狈和急迫"
+    },
+    "characters": ["C001", "C002"],
+    "sourceRefs": ["ch1:p7-p15"],
+    "status": "DONE"
+  },
+  {
+    "sceneId": "S002",
+    "seqNo": 2,
+    "title": "手稿名字首次出现",
+    "slugline": {
+      "intExt": "INT",
+      "locationId": "L001",
+      "timeOfDay": "NIGHT"
+    },
+    "purpose": {
+      "plot": "抛出失踪手稿线索",
+      "character": "让沈老板对林舟进行试探"
+    },
+    "characters": ["C001", "C002"],
+    "sourceRefs": ["ch1:p16-p22"],
+    "status": "WARNING"
+  },
+  {
+    "sceneId": "S003",
+    "seqNo": 3,
+    "title": "追查决定",
+    "slugline": {
+      "intExt": "EXT",
+      "locationId": "L002",
+      "timeOfDay": "LATE_NIGHT"
+    },
+    "purpose": {
+      "plot": "主角决定接下追查任务",
+      "character": "林舟第一次主动争取机会"
+    },
+    "characters": ["C001"],
+    "sourceRefs": ["ch1:p23-p30"],
+    "status": "DONE"
+  }
+]

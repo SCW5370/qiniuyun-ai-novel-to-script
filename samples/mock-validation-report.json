@@ -1,0 +1,12 @@
+{
+  "projectId": "proj_20260606_001",
+  "status": "WARNING",
+  "items": [
+    {
+      "sceneId": "S002",
+      "level": "warning",
+      "field": "dialogue",
+      "message": "曾出现未定义角色引用，当前版本已回退为稳定对白。"
+    }
+  ]
+}

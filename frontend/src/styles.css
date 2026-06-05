@@ -125,6 +125,10 @@ button {
   min-height: 280px;
 }
 
+.validation-panel {
+  grid-column: 1 / 2;
+}
+
 .project-meta {
   display: grid;
   gap: 12px;
@@ -146,6 +150,22 @@ button {
   margin: 0;
   display: grid;
   gap: 10px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: #e4e7ec;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f97316 0%, #0ea5e9 100%);
 }
 
 .phase {
@@ -181,6 +201,117 @@ button {
   border: 1px dashed #d0d5dd;
   border-radius: 8px;
   background: #fcfcfd;
+}
+
+.scene-list {
+  display: grid;
+  gap: 12px;
+}
+
+.scene-card {
+  text-align: left;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+  cursor: pointer;
+}
+
+.scene-card-active {
+  border-color: #0f172a;
+  background: #fff7ed;
+}
+
+.scene-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.scene-card p {
+  margin: 0 0 12px;
+  color: #475467;
+}
+
+.scene-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scene-card-tags span,
+.inline-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #eaecf0;
+  color: #344054;
+  font-size: 12px;
+}
+
+.scene-detail {
+  display: grid;
+  gap: 16px;
+}
+
+.detail-block {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-label {
+  color: #667085;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.detail-list,
+.dialogue-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.dialogue-list li {
+  display: grid;
+  gap: 4px;
+}
+
+.pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.validation-list {
+  display: grid;
+  gap: 12px;
+}
+
+.validation-item {
+  border-radius: 8px;
+  border: 1px solid #fecdca;
+  background: #fff7ed;
+  padding: 12px;
+}
+
+.validation-item strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.validation-item p {
+  margin: 0;
+  color: #7a2e0e;
+}
+
+.validation-pass {
+  border-color: #abefc6;
+  background: #ecfdf3;
+  color: #027a48;
 }
 
 .code-block {

@@ -1,0 +1,66 @@
+[
+  {
+    "sceneId": "S001",
+    "seqNo": 1,
+    "title": "雨夜闯店",
+    "action": [
+      "林舟推门而入，浑身湿透，门铃一响，书店里最后一盏灯闪了两下。",
+      "沈老板没有抬头，只把桌上的毛巾往前推了半寸。"
+    ],
+    "dialogue": [
+      {
+        "characterId": "C001",
+        "line": "老板，还营业吗？我想找一本……可能根本不存在的书。"
+      },
+      {
+        "characterId": "C002",
+        "line": "不存在的书，往往先不存在于找书的人脑子里。"
+      }
+    ],
+    "sourceRefs": ["ch1:p7-p15"],
+    "validationStatus": "PASSED",
+    "warnings": []
+  },
+  {
+    "sceneId": "S002",
+    "seqNo": 2,
+    "title": "手稿名字首次出现",
+    "action": [
+      "沈老板从抽屉里拿出一张残页，页角焦黑，像曾从火里捞出来。",
+      "林舟下意识后退半步，目光却被纸上的字牢牢钉住。"
+    ],
+    "dialogue": [
+      {
+        "characterId": "C002",
+        "line": "你要找的，不是书。是《归潮手稿》的下半部。"
+      },
+      {
+        "characterId": "C001",
+        "line": "你怎么知道我在找它？"
+      }
+    ],
+    "sourceRefs": ["ch1:p16-p22"],
+    "validationStatus": "WARNING",
+    "warnings": [
+      "角色 C003 在一版草稿中被错误引用，已在当前 mock 中移除。"
+    ]
+  },
+  {
+    "sceneId": "S003",
+    "seqNo": 3,
+    "title": "追查决定",
+    "action": [
+      "雨势渐歇，林舟站在书店门口，手里攥着那张残页。",
+      "他回头看了一眼沈老板，终于把伞收起，转身走进巷子更深处。"
+    ],
+    "dialogue": [
+      {
+        "characterId": "C001",
+        "line": "如果它真还存在，我把下半部找回来。"
+      }
+    ],
+    "sourceRefs": ["ch1:p23-p30"],
+    "validationStatus": "PASSED",
+    "warnings": []
+  }
+]
