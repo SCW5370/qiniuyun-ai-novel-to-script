@@ -26,3 +26,9 @@ replay_pid*
 # Local environment variables and binary files
 .env
 *.dll
+
+# Frontend dependencies and build outputs
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
