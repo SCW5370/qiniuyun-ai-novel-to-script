@@ -102,6 +102,11 @@ button {
   font-size: 12px;
 }
 
+.status-pill-warn {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .project-panel {
   grid-column: 1 / 2;
 }
@@ -142,6 +147,16 @@ button {
 
 .project-meta strong {
   font-size: 16px;
+}
+
+.notice-banner {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 13px;
 }
 
 .phase-list {

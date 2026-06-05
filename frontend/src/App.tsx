@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getProject } from "./api/client";
+import type { ProjectViewModel, WorkbenchConnectionMode } from "./api/types";
+import { appConfig } from "./config";
 import projectData from "../../samples/mock-project.json";
 import outlineData from "../../samples/mock-outline.json";
 import scenesData from "../../samples/mock-scenes.json";
@@ -16,7 +19,23 @@ const phaseLabels = [
 
 const sceneMap = Object.fromEntries(scenesData.map((scene) => [scene.sceneId, scene]));
 
-function buildYamlPreview(sceneId: string) {
+const mockProject = {
+  projectId: projectData.projectId,
+  backendProjectId: Number(projectData.projectId.replace(/\D/g, "")) || 1,
+  title: projectData.title,
+  status: projectData.status,
+  currentPhase: projectData.currentPhase,
+  progress: projectData.progress,
+  createdAt: projectData.createdAt,
+  updatedAt: projectData.updatedAt
+} as ProjectViewModel;
+
+function resolveProjectId() {
+  const searchParams = new URLSearchParams(window.location.search);
+  return searchParams.get("projectId") || appConfig.defaultProjectId;
+}
+
+function buildYamlPreview(sceneId: string, project: ProjectViewModel) {
   const scene = sceneMap[sceneId];
 
   if (!scene) {
@@ -34,8 +53,8 @@ function buildYamlPreview(sceneId: string) {
 
   return `schema_version: "1.0.0"
 meta:
-  project_id: "${projectData.projectId}"
-  title: "${projectData.title}"
+  project_id: "${project.projectId}"
+  title: "${project.title}"
   workflow: "reader-outline-writer-validator"
 scenes:
   - scene_id: "${scene.sceneId}"
@@ -50,10 +69,61 @@ ${dialogueLines}
 
 function App() {
   const [selectedSceneId, setSelectedSceneId] = useState(outlineData[0]?.sceneId ?? "");
+  const [projectId] = useState(resolveProjectId);
+  const [project, setProject] = useState<ProjectViewModel>(mockProject);
+  const [connectionMode, setConnectionMode] = useState<WorkbenchConnectionMode>("mock-only");
+  const [errorMessage, setErrorMessage] = useState("");
   const selectedScene = sceneMap[selectedSceneId];
   const selectedWarnings = validationReport.items.filter(
     (item) => item.sceneId === selectedSceneId
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrapProject() {
+      try {
+        const nextProject = await getProject(projectId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setProject(nextProject);
+        setConnectionMode("connected");
+        setErrorMessage("");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "无法连接项目接口";
+
+        setErrorMessage(message);
+
+        if (appConfig.enableMockFallback) {
+          setProject(mockProject);
+          setConnectionMode("mock-only");
+          return;
+        }
+
+        setConnectionMode("error");
+      }
+    }
+
+    void bootstrapProject();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const connectionLabel =
+    connectionMode === "connected"
+      ? "真实项目"
+      : connectionMode === "mock-only"
+        ? "Mock 回退"
+        : "连接失败";
 
   return (
     <div className="app-shell">
@@ -75,16 +145,19 @@ function App() {
         <section className="panel project-panel">
           <div className="panel-header">
             <h2>项目概览</h2>
-            <span className="status-pill">{projectData.status}</span>
+            <span className={connectionMode === "connected" ? "status-pill" : "status-pill status-pill-warn"}>
+              {connectionLabel}
+            </span>
           </div>
+          {errorMessage ? <div className="notice-banner">{errorMessage}</div> : null}
           <div className="project-meta">
             <div>
               <span>项目 ID</span>
-              <strong>{projectData.projectId}</strong>
+              <strong>{project.projectId}</strong>
             </div>
             <div>
               <span>当前阶段</span>
-              <strong>{projectData.currentPhase}</strong>
+              <strong>{project.currentPhase}</strong>
             </div>
             <div>
               <span>目标交付</span>
@@ -94,23 +167,29 @@ function App() {
               <span>场景数量</span>
               <strong>{outlineData.length}</strong>
             </div>
+            <div>
+              <span>项目标题</span>
+              <strong>{project.title}</strong>
+            </div>
           </div>
         </section>
 
         <section className="panel progress-panel">
           <div className="panel-header">
             <h2>流程阶段</h2>
-            <span>{projectData.progress}%</span>
+            <span>{project.progress}%</span>
           </div>
           <div className="progress-bar">
-            <span style={{ width: `${projectData.progress}%` }} />
+            <span style={{ width: `${project.progress}%` }} />
           </div>
           <ol className="phase-list">
             {phaseLabels.map((label) => {
               const isActive = label === "Scene 生成";
               return (
                 <li key={label} className={isActive ? "phase phase-active" : "phase"}>
-                  <span className="phase-index">{String(phaseLabels.indexOf(label) + 1).padStart(2, "0")}</span>
+                  <span className="phase-index">
+                    {String(phaseLabels.indexOf(label) + 1).padStart(2, "0")}
+                  </span>
                   <span>{label}</span>
                 </li>
               );
@@ -128,7 +207,9 @@ function App() {
               <button
                 key={scene.sceneId}
                 type="button"
-                className={scene.sceneId === selectedSceneId ? "scene-card scene-card-active" : "scene-card"}
+                className={
+                  scene.sceneId === selectedSceneId ? "scene-card scene-card-active" : "scene-card"
+                }
                 onClick={() => setSelectedSceneId(scene.sceneId)}
               >
                 <div className="scene-card-top">
@@ -197,7 +278,7 @@ function App() {
               导出 YAML
             </button>
           </div>
-          <pre className="code-block">{buildYamlPreview(selectedSceneId)}</pre>
+          <pre className="code-block">{buildYamlPreview(selectedSceneId, project)}</pre>
         </section>
 
         <section className="panel validation-panel">
