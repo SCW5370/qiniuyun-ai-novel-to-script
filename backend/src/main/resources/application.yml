@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: backend
+  config:
+    import:
+      # 从 backend 目录运行时读取仓库根目录的 .env；从仓库根目录运行时读取当前目录的 .env。
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
+  datasource:
+    url: jdbc:mysql://localhost:${MYSQL_PORT:3306}/${MYSQL_DATABASE:novel2script}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_APP_USERNAME:novel2script_app}
+    password: ${MYSQL_APP_PASSWORD:dev_app_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+server:
+  port: 8080

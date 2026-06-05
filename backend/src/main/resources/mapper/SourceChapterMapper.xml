@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.novel2script.backend.source.SourceChapterMapper">
+
+    <resultMap id="SourceChapterResultMap" type="com.novel2script.backend.source.SourceChapter">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="chapterNo" column="chapter_no"/>
+        <result property="title" column="title"/>
+        <result property="rawText" column="raw_text"/>
+        <result property="cleanText" column="clean_text"/>
+        <result property="summary" column="summary"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insertBatch">
+        insert into source_chapters (project_id, chapter_no, title, raw_text, clean_text, summary)
+        values
+        <foreach collection="chapters" item="chapter" separator=",">
+            (#{chapter.projectId}, #{chapter.chapterNo}, #{chapter.title}, #{chapter.rawText}, #{chapter.cleanText}, #{chapter.summary})
+        </foreach>
+    </insert>
+
+    <select id="findByProjectIdOrderByChapterNoAsc" resultMap="SourceChapterResultMap">
+        select id, project_id, chapter_no, title, raw_text, clean_text, summary, created_at
+        from source_chapters
+        where project_id = #{projectId}
+        order by chapter_no asc
+    </select>
+
+    <delete id="deleteByProjectId">
+        delete from source_chapters
+        where project_id = #{projectId}
+    </delete>
+</mapper>
