@@ -1,0 +1,229 @@
+# 后端接口规范
+
+本文档描述当前后端已经实现的 A 线基础接口，覆盖项目创建、项目查询、小说文本提交和章节查询。
+
+## 基础信息
+
+- 服务地址：`http://localhost:8080`
+- 数据格式：`application/json`
+- 字符编码：`UTF-8`
+- 当前接口前缀：`/api`
+
+## 通用响应结构
+
+所有接口统一返回以下结构：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {}
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `success` | boolean | 请求是否成功 |
+| `message` | string | 响应消息；成功时通常为 `ok` |
+| `data` | object / array / null | 业务数据；失败时通常为 `null` |
+
+错误响应示例：
+
+```json
+{
+  "success": false,
+  "message": "项目不存在: 999",
+  "data": null
+}
+```
+
+## 项目状态
+
+| 状态 | 说明 |
+| --- | --- |
+| `CREATED` | 项目已创建，尚未提交小说文本 |
+| `SOURCE_SUBMITTED` | 已提交小说文本，正在处理原文 |
+| `CHAPTERED` | 已完成章节切分 |
+| `FAILED` | 处理失败 |
+
+## 创建项目
+
+```http
+POST /api/projects
+```
+
+请求体：
+
+```json
+{
+  "title": "雨夜旧书店"
+}
+```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `title` | string | 是 | 项目标题，最长 120 个字符 |
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {
+    "id": 1,
+    "title": "雨夜旧书店",
+    "status": "CREATED",
+    "createdAt": "2026-06-06T00:00:00",
+    "updatedAt": "2026-06-06T00:00:00"
+  }
+}
+```
+
+## 查询项目
+
+```http
+GET /api/projects/{projectId}
+```
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `projectId` | number | 项目 ID |
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {
+    "id": 1,
+    "title": "雨夜旧书店",
+    "status": "CHAPTERED",
+    "createdAt": "2026-06-06T00:00:00",
+    "updatedAt": "2026-06-06T00:01:00"
+  }
+}
+```
+
+## 提交小说文本
+
+```http
+POST /api/projects/{projectId}/source
+```
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `projectId` | number | 项目 ID |
+
+请求体：
+
+```json
+{
+  "content": "第一章 雨夜\n林舟推门而入。\n\n第二章 旧书店\n老板抬起头。"
+}
+```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `content` | string | 是 | 小说正文，不能为空 |
+
+处理规则：
+
+- 提交后会清洗文本换行和多余空行。
+- 支持识别 `第一章`、`第1章`、`Chapter 1`、`CHAPTER 1`、`1. 标题`、`1、标题` 等章节标题。
+- 如果没有识别到章节标题，会把全文作为第 1 章。
+- 重新提交小说文本时，会删除该项目旧章节并保存新章节。
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": [
+    {
+      "id": 1,
+      "chapterNo": 1,
+      "title": "第一章 雨夜",
+      "cleanText": "第一章 雨夜\n林舟推门而入。",
+      "summary": null,
+      "createdAt": "2026-06-06T00:01:00"
+    },
+    {
+      "id": 2,
+      "chapterNo": 2,
+      "title": "第二章 旧书店",
+      "cleanText": "第二章 旧书店\n老板抬起头。",
+      "summary": null,
+      "createdAt": "2026-06-06T00:01:00"
+    }
+  ]
+}
+```
+
+## 查询章节列表
+
+```http
+GET /api/projects/{projectId}/chapters
+```
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `projectId` | number | 项目 ID |
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": [
+    {
+      "id": 1,
+      "chapterNo": 1,
+      "title": "第一章 雨夜",
+      "cleanText": "第一章 雨夜\n林舟推门而入。",
+      "summary": null,
+      "createdAt": "2026-06-06T00:01:00"
+    }
+  ]
+}
+```
+
+## 调试示例
+
+创建项目：
+
+```bash
+curl -X POST http://localhost:8080/api/projects ^
+  -H "Content-Type: application/json" ^
+  -d "{\"title\":\"雨夜旧书店\"}"
+```
+
+提交小说文本：
+
+```bash
+curl -X POST http://localhost:8080/api/projects/1/source ^
+  -H "Content-Type: application/json" ^
+  -d "{\"content\":\"第一章 雨夜\n林舟推门而入。\n\n第二章 旧书店\n老板抬起头。\"}"
+```
+
+查询章节：
+
+```bash
+curl http://localhost:8080/api/projects/1/chapters
+```
+
