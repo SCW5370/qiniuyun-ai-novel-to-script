@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
-import { getProject } from "./api/client";
-import type { ProjectViewModel, WorkbenchConnectionMode } from "./api/types";
+import { getProject, getProjectChapters } from "./api/client";
+import type {
+  ChapterViewModel,
+  ProjectViewModel,
+  WorkbenchConnectionMode
+} from "./api/types";
 import { appConfig } from "./config";
 import projectData from "../../samples/mock-project.json";
 import outlineData from "../../samples/mock-outline.json";
@@ -71,6 +75,7 @@ function App() {
   const [selectedSceneId, setSelectedSceneId] = useState(outlineData[0]?.sceneId ?? "");
   const [projectId] = useState(resolveProjectId);
   const [project, setProject] = useState<ProjectViewModel>(mockProject);
+  const [chapters, setChapters] = useState<ChapterViewModel[]>([]);
   const [connectionMode, setConnectionMode] = useState<WorkbenchConnectionMode>("mock-only");
   const [errorMessage, setErrorMessage] = useState("");
   const selectedScene = sceneMap[selectedSceneId];
@@ -83,13 +88,17 @@ function App() {
 
     async function bootstrapProject() {
       try {
-        const nextProject = await getProject(projectId);
+        const [nextProject, nextChapters] = await Promise.all([
+          getProject(projectId),
+          getProjectChapters(projectId)
+        ]);
 
         if (cancelled) {
           return;
         }
 
         setProject(nextProject);
+        setChapters(nextChapters);
         setConnectionMode("connected");
         setErrorMessage("");
       } catch (error) {
@@ -103,10 +112,12 @@ function App() {
 
         if (appConfig.enableMockFallback) {
           setProject(mockProject);
+          setChapters([]);
           setConnectionMode("mock-only");
           return;
         }
 
+        setChapters([]);
         setConnectionMode("error");
       }
     }
@@ -195,6 +206,36 @@ function App() {
               );
             })}
           </ol>
+        </section>
+
+        <section className="panel chapter-panel">
+          <div className="panel-header">
+            <h2>章节原文</h2>
+            <span>{connectionMode === "connected" ? `${chapters.length} chapters` : "等待真实接口"}</span>
+          </div>
+          {connectionMode === "connected" ? (
+            chapters.length > 0 ? (
+              <div className="chapter-list">
+                {chapters.map((chapter) => (
+                  <article key={chapter.id} className="chapter-card">
+                    <div className="chapter-card-top">
+                      <strong>
+                        第 {chapter.chapterNo} 章 {chapter.title}
+                      </strong>
+                      <span>#{chapter.id}</span>
+                    </div>
+                    <p>{chapter.previewText}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state empty-state-compact">当前项目暂无章节数据。</div>
+            )
+          ) : (
+            <div className="empty-state empty-state-compact">
+              当前仍使用 mock 场景工作台。A 线章节接口接通后，这里会自动显示真实章节列表。
+            </div>
+          )}
         </section>
 
         <section className="panel outline-panel">

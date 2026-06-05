@@ -120,6 +120,10 @@ button {
   min-height: 320px;
 }
 
+.chapter-panel {
+  grid-column: 1 / 2;
+}
+
 .scene-panel {
   grid-column: 3 / 4;
   min-height: 320px;
@@ -216,6 +220,34 @@ button {
   border: 1px dashed #d0d5dd;
   border-radius: 8px;
   background: #fcfcfd;
+}
+
+.empty-state-compact {
+  min-height: 140px;
+}
+
+.chapter-list {
+  display: grid;
+  gap: 12px;
+}
+
+.chapter-card {
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.chapter-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.chapter-card p {
+  margin: 0;
+  color: #475467;
 }
 
 .scene-list {
