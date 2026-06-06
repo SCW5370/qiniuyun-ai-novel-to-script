@@ -3,6 +3,7 @@ package com.novel2script.backend.project;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -12,6 +13,8 @@ import java.util.Optional;
 public interface ProjectMapper {
 
     int insert(Project project);
+
+    List<Project> findAll(@Param("keyword") String keyword);
 
     Optional<Project> findByProjectId(@Param("projectId") String projectId);
 

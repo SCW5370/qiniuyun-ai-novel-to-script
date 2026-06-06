@@ -25,10 +25,12 @@ const PHASE_LABELS: Record<BackendProjectStatus, { phase: string; progress: numb
   FAILED: { phase: "failed", progress: 100 }
 };
 
-async function requestJson<T>(path: string) {
+async function requestJson<T>(path: string, options: RequestInit = {}) {
   const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
+    ...options,
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...options.headers
     }
   });
 
@@ -45,6 +47,13 @@ async function requestJson<T>(path: string) {
   }
 
   return payload.data;
+}
+
+function buildJsonPostOptions(body?: unknown): RequestInit {
+  return {
+    method: "POST",
+    body: body == null ? undefined : JSON.stringify(body)
+  };
 }
 
 function createPreviewText(cleanText: string) {
@@ -118,13 +127,39 @@ export async function getProject(projectId: string) {
   return adaptProject(data);
 }
 
+export async function listProjects(keyword?: string) {
+  const query = keyword?.trim() ? `?keyword=${encodeURIComponent(keyword.trim())}` : "";
+  const data = await requestJson<BackendProjectResponse[]>(`/projects${query}`);
+  return data.map(adaptProject);
+}
+
+export async function createProject(title: string) {
+  const data = await requestJson<BackendProjectResponse>(
+    "/projects",
+    buildJsonPostOptions({ title })
+  );
+  return adaptProject(data);
+}
+
 export async function getProjectChapters(projectId: string) {
   const data = await requestJson<BackendChapterResponse[]>(`/projects/${projectId}/chapters`);
   return data.map(adaptChapter);
 }
 
+export async function submitProjectSource(projectId: string, content: string) {
+  const data = await requestJson<BackendChapterResponse[]>(
+    `/projects/${projectId}/source`,
+    buildJsonPostOptions({ content })
+  );
+  return data.map(adaptChapter);
+}
+
 export async function analyzeStoryAssets(projectId: string) {
-  const data = await requestJson<BackendStoryAnalysisResponse>(`/projects/${projectId}/analyze`);
+  // 对齐开发契约：分析会写入实体和事件资产，因此必须使用 POST /analyze。
+  const data = await requestJson<BackendStoryAnalysisResponse>(
+    `/projects/${projectId}/analyze`,
+    buildJsonPostOptions()
+  );
   return adaptStoryAnalysis(data);
 }
 

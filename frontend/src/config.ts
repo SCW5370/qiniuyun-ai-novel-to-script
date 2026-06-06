@@ -11,7 +11,7 @@ const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/
   ""
 );
 
-const defaultProjectId = import.meta.env.VITE_DEFAULT_PROJECT_ID ?? "1";
+const defaultProjectId = import.meta.env.VITE_DEFAULT_PROJECT_ID ?? "";
 
 export const appConfig = {
   apiBaseUrl,

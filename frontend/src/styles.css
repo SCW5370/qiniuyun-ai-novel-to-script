@@ -69,6 +69,21 @@ button {
   cursor: not-allowed;
 }
 
+.primary-button {
+  width: 100%;
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 11px 14px;
+  cursor: pointer;
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: 320px 1fr 1fr;
@@ -122,6 +137,10 @@ button {
   grid-column: 1 / 2;
 }
 
+.project-entry-panel {
+  grid-column: 1 / 2;
+}
+
 .progress-panel {
   grid-column: 1 / 2;
 }
@@ -132,6 +151,10 @@ button {
 }
 
 .chapter-panel {
+  grid-column: 1 / 2;
+}
+
+.source-submit-panel {
   grid-column: 1 / 2;
 }
 
@@ -170,6 +193,68 @@ button {
 
 .project-meta strong {
   font-size: 16px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.field-block {
+  display: grid;
+  gap: 8px;
+}
+
+.field-block span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.inline-form input {
+  min-width: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #101828;
+  background: #ffffff;
+}
+
+.project-list {
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.project-list-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.project-list-item-active {
+  border-color: #0f172a;
+  background: #fff7ed;
+}
+
+.project-list-item span,
+.project-list-item small {
+  color: #667085;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .notice-banner {
@@ -273,6 +358,19 @@ button {
 .chapter-card p {
   margin: 0;
   color: #475467;
+}
+
+.source-textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  color: #101828;
+  background: #ffffff;
+  font: inherit;
 }
 
 .asset-list {
@@ -454,8 +552,10 @@ button {
   }
 
   .project-panel,
+  .project-entry-panel,
   .progress-panel,
   .chapter-panel,
+  .source-submit-panel,
   .asset-panel,
   .event-panel,
   .validation-panel,

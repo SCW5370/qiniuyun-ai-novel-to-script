@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   analyzeStoryAssets,
+  createProject,
   getProject,
   getProjectChapters,
   getStoryEntities,
-  getStoryEvents
+  getStoryEvents,
+  listProjects,
+  submitProjectSource
 } from "./api/client";
 import type {
   ChapterViewModel,
@@ -46,6 +49,10 @@ function resolveProjectId() {
   return searchParams.get("projectId") || appConfig.defaultProjectId;
 }
 
+function isContractProjectId(value: string) {
+  return value.startsWith("proj_");
+}
+
 function buildYamlPreview(sceneId: string, project: ProjectViewModel) {
   const scene = sceneMap[sceneId];
 
@@ -80,22 +87,113 @@ ${dialogueLines}
 
 function App() {
   const [selectedSceneId, setSelectedSceneId] = useState(outlineData[0]?.sceneId ?? "");
-  const [projectId] = useState(resolveProjectId);
+  const [projectId, setProjectId] = useState(resolveProjectId);
+  const [projectList, setProjectList] = useState<ProjectViewModel[]>([]);
+  const [projectKeyword, setProjectKeyword] = useState("");
+  const [projectTitleInput, setProjectTitleInput] = useState("");
+  const [sourceTextInput, setSourceTextInput] = useState("");
   const [project, setProject] = useState<ProjectViewModel>(mockProject);
   const [chapters, setChapters] = useState<ChapterViewModel[]>([]);
   const [storyEntities, setStoryEntities] = useState<StoryEntityViewModel[]>([]);
   const [storyEvents, setStoryEvents] = useState<StoryEventViewModel[]>([]);
   const [connectionMode, setConnectionMode] = useState<WorkbenchConnectionMode>("mock-only");
   const [errorMessage, setErrorMessage] = useState("");
+  const [projectActionMessage, setProjectActionMessage] = useState("");
   const [storyAssetsMessage, setStoryAssetsMessage] = useState("");
   const [storyEventsMessage, setStoryEventsMessage] = useState("");
   const [analysisMessage, setAnalysisMessage] = useState("");
   const [analysisStatus, setAnalysisStatus] = useState<"success" | "error" | "">("");
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [isSubmittingSource, setIsSubmittingSource] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const selectedScene = sceneMap[selectedSceneId];
   const selectedWarnings = validationReport.items.filter(
     (item) => item.sceneId === selectedSceneId
   );
+
+  function switchProject(nextProjectId: string) {
+    setProjectId(nextProjectId);
+    window.history.replaceState(null, "", `?projectId=${encodeURIComponent(nextProjectId)}`);
+  }
+
+  async function loadProjectDetail(nextProjectId: string) {
+    const [nextProject, nextChapters] = await Promise.all([
+      getProject(nextProjectId),
+      getProjectChapters(nextProjectId)
+    ]);
+
+    setProject(nextProject);
+    setChapters(nextChapters);
+    setConnectionMode("connected");
+    setErrorMessage("");
+  }
+
+  async function refreshProjectList(keyword = projectKeyword) {
+    const projects = await listProjects(keyword);
+    setProjectList(projects);
+    return projects;
+  }
+
+  async function handleCreateProject() {
+    const title = projectTitleInput.trim();
+    if (!title || isCreatingProject) {
+      return;
+    }
+
+    setIsCreatingProject(true);
+    setProjectActionMessage("");
+
+    try {
+      // 对齐开发契约：新建项目必须先调用 POST /api/projects，由后端返回 projectId。
+      const createdProject = await createProject(title);
+      setProjectTitleInput("");
+      setProjectActionMessage(`项目已创建：${createdProject.projectId}`);
+      await refreshProjectList("");
+      switchProject(createdProject.projectId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法创建项目";
+      setProjectActionMessage(message);
+    } finally {
+      setIsCreatingProject(false);
+    }
+  }
+
+  async function handleSearchProjects() {
+    try {
+      await refreshProjectList(projectKeyword);
+      setProjectActionMessage("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法搜索项目";
+      setProjectActionMessage(message);
+    }
+  }
+
+  async function handleSubmitSourceText() {
+    const content = sourceTextInput.trim();
+    if (connectionMode !== "connected" || !content || isSubmittingSource) {
+      return;
+    }
+
+    setIsSubmittingSource(true);
+    setProjectActionMessage("");
+
+    try {
+      // 对齐开发契约：小说正文提交到 POST /api/projects/{projectId}/source。
+      const nextChapters = await submitProjectSource(project.projectId, content);
+      setChapters(nextChapters);
+      setStoryEntities([]);
+      setStoryEvents([]);
+      setSourceTextInput("");
+      setProjectActionMessage(`小说已提交并切分为 ${nextChapters.length} 个章节。`);
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法提交小说正文";
+      setProjectActionMessage(message);
+    } finally {
+      setIsSubmittingSource(false);
+    }
+  }
 
   async function handleAnalyzeStoryAssets() {
     if (connectionMode !== "connected" || isAnalyzing) {
@@ -119,6 +217,8 @@ function App() {
       setStoryEventsMessage("");
       setAnalysisStatus("success");
       setAnalysisMessage(`分析完成，已同步 ${result.entityCount} 个实体和 ${result.eventCount} 个事件。`);
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
     } catch (error) {
       const message = error instanceof Error ? error.message : "无法执行故事资产分析";
       setAnalysisStatus("error");
@@ -133,19 +233,34 @@ function App() {
 
     async function bootstrapProject() {
       try {
-        const [nextProject, nextChapters] = await Promise.all([
-          getProject(projectId),
-          getProjectChapters(projectId)
-        ]);
+        const projects = await listProjects();
 
         if (cancelled) {
           return;
         }
 
-        setProject(nextProject);
-        setChapters(nextChapters);
-        setConnectionMode("connected");
-        setErrorMessage("");
+        setProjectList(projects);
+
+        const targetProjectId = isContractProjectId(projectId)
+          ? projectId
+          : projects[0]?.projectId ?? "";
+
+        if (!targetProjectId) {
+          setProject(mockProject);
+          setChapters([]);
+          setStoryEntities([]);
+          setStoryEvents([]);
+          setConnectionMode("mock-only");
+          setErrorMessage("暂无真实项目，请先新建项目并提交小说。");
+          return;
+        }
+
+        if (targetProjectId !== projectId) {
+          switchProject(targetProjectId);
+          return;
+        }
+
+        await loadProjectDetail(targetProjectId);
       } catch (error) {
         if (cancelled) {
           return;
@@ -269,13 +384,85 @@ function App() {
         <button
           className="ghost-button"
           type="button"
-          onClick={() => setSelectedSceneId(outlineData[0]?.sceneId ?? "")}
+          onClick={() => void refreshProjectList(projectKeyword)}
         >
-          载入示例项目
+          刷新项目
         </button>
       </header>
 
       <main className="workspace-grid">
+        {/* 对齐开发契约：用户从项目列表选择真实 projectId，不再手动查询数据库或拼 URL。 */}
+        <section className="panel project-entry-panel">
+          <div className="panel-header">
+            <h2>项目入口</h2>
+            <span>{projectList.length} projects</span>
+          </div>
+
+          <div className="form-grid">
+            <label className="field-block">
+              <span>新建项目</span>
+              <div className="inline-form">
+                <input
+                  value={projectTitleInput}
+                  onChange={(event) => setProjectTitleInput(event.target.value)}
+                  placeholder="项目标题"
+                />
+                <button
+                  className="ghost-button"
+                  type="button"
+                  disabled={isCreatingProject || !projectTitleInput.trim()}
+                  onClick={() => void handleCreateProject()}
+                >
+                  {isCreatingProject ? "创建中..." : "创建"}
+                </button>
+              </div>
+            </label>
+
+            <label className="field-block">
+              <span>搜索项目</span>
+              <div className="inline-form">
+                <input
+                  value={projectKeyword}
+                  onChange={(event) => setProjectKeyword(event.target.value)}
+                  placeholder="标题或 projectId"
+                />
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void handleSearchProjects()}
+                >
+                  搜索
+                </button>
+              </div>
+            </label>
+          </div>
+
+          {projectActionMessage ? <div className="notice-banner">{projectActionMessage}</div> : null}
+
+          <div className="project-list">
+            {projectList.length === 0 ? (
+              <div className="empty-state empty-state-compact">暂无真实项目。</div>
+            ) : (
+              projectList.map((item) => (
+                <button
+                  key={item.projectId}
+                  className={
+                    item.projectId === project.projectId
+                      ? "project-list-item project-list-item-active"
+                      : "project-list-item"
+                  }
+                  type="button"
+                  onClick={() => switchProject(item.projectId)}
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.projectId}</span>
+                  <small>{item.status}</small>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+
         <section className="panel project-panel">
           <div className="panel-header">
             <h2>项目概览</h2>
@@ -382,6 +569,28 @@ function App() {
               当前仍使用 mock 场景工作台。A 线章节接口接通后，这里会自动显示真实章节列表。
             </div>
           )}
+        </section>
+
+        {/* 对齐开发契约：小说正文提交后端 POST /source，由 A 线负责章节切分和入库。 */}
+        <section className="panel source-submit-panel">
+          <div className="panel-header">
+            <h2>小说提交</h2>
+            <span>{sourceTextInput.trim().length} chars</span>
+          </div>
+          <textarea
+            className="source-textarea"
+            value={sourceTextInput}
+            onChange={(event) => setSourceTextInput(event.target.value)}
+            placeholder="粘贴小说正文"
+          />
+          <button
+            className="primary-button"
+            type="button"
+            disabled={connectionMode !== "connected" || isSubmittingSource || !sourceTextInput.trim()}
+            onClick={() => void handleSubmitSourceText()}
+          >
+            {isSubmittingSource ? "提交中..." : "提交小说"}
+          </button>
         </section>
 
         <section className="panel asset-panel">

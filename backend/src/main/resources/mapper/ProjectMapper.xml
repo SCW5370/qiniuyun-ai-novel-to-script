@@ -17,6 +17,20 @@
         values (#{projectId}, #{title}, #{status})
     </insert>
 
+    <select id="findAll" resultMap="ProjectResultMap">
+        select project_id, title, status, created_at, updated_at
+        from projects
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    title like concat('%', #{keyword}, '%')
+                    or project_id like concat('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        order by updated_at desc, created_at desc
+    </select>
+
     <select id="findByProjectId" resultMap="ProjectResultMap">
         select project_id, title, status, created_at, updated_at
         from projects

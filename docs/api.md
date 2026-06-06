@@ -88,6 +88,42 @@ POST /api/projects
 }
 ```
 
+## 查询项目列表
+
+```http
+GET /api/projects?keyword=雨夜
+```
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `keyword` | string | 否 | 按项目标题或 `projectId` 模糊搜索 |
+
+处理规则：
+
+- 不传 `keyword` 时返回全部项目。
+- 当前没有账号系统，默认返回当前数据库中的全部项目。
+- 返回顺序按 `updatedAt`、`createdAt` 倒序，方便前端默认选择最近项目。
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": [
+    {
+      "projectId": "proj_20260606_000001",
+      "title": "雨夜旧书店",
+      "status": "CHAPTERED",
+      "createdAt": "2026-06-06T00:00:00",
+      "updatedAt": "2026-06-06T00:01:00"
+    }
+  ]
+}
+```
+
 ## 查询项目
 
 ```http

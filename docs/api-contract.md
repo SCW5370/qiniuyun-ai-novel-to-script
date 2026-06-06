@@ -184,6 +184,8 @@ Rules:
 
 ## API Surface
 
+- `POST /api/projects`
+- `GET /api/projects`
 - `POST /api/projects/{projectId}/analyze`
 - `GET /api/projects/{projectId}`
 - `GET /api/projects/{projectId}/chapters`

@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
@@ -39,6 +40,14 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public ProjectResponse getProject(String projectId) {
         return ProjectResponse.from(getProjectEntity(projectId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectResponse> listProjects(String keyword) {
+        String normalizedKeyword = keyword == null ? null : keyword.trim();
+        return projectMapper.findAll(normalizedKeyword).stream()
+                .map(ProjectResponse::from)
+                .toList();
     }
 
     @Transactional
