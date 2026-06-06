@@ -2,12 +2,14 @@ import { appConfig } from "../config";
 import type {
   ApiEnvelope,
   BackendChapterResponse,
+  BackendOutlineSceneResponse,
   BackendProjectResponse,
   BackendProjectStatus,
   BackendStoryAnalysisResponse,
   BackendStoryEntityResponse,
   BackendStoryEventResponse,
   ChapterViewModel,
+  OutlineSceneViewModel,
   ProjectViewModel,
   StoryAnalysisViewModel,
   StoryEntityViewModel,
@@ -122,6 +124,26 @@ export function adaptStoryAnalysis(
   };
 }
 
+export function adaptOutlineScene(scene: BackendOutlineSceneResponse): OutlineSceneViewModel {
+  return {
+    sceneId: scene.sceneId,
+    seqNo: scene.seqNo,
+    title: scene.title,
+    slugline: {
+      intExt: scene.slugline.intExt,
+      locationId: scene.slugline.locationId,
+      timeOfDay: scene.slugline.timeOfDay
+    },
+    purpose: {
+      plot: scene.purpose.plot,
+      character: scene.purpose.character
+    },
+    characters: scene.characters ?? [],
+    sourceRefs: scene.sourceRefs ?? [],
+    status: scene.status
+  };
+}
+
 export async function getProject(projectId: string) {
   const data = await requestJson<BackendProjectResponse>(`/projects/${projectId}`);
   return adaptProject(data);
@@ -173,4 +195,9 @@ export async function getStoryEvents(projectId: string) {
     `/projects/${projectId}/story-events`
   );
   return data.map(adaptStoryEvent);
+}
+
+export async function getProjectOutline(projectId: string) {
+  const data = await requestJson<BackendOutlineSceneResponse[]>(`/projects/${projectId}/outline`);
+  return data.map(adaptOutlineScene);
 }

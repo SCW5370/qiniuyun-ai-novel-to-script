@@ -4,6 +4,7 @@ import {
   createProject,
   getProject,
   getProjectChapters,
+  getProjectOutline,
   getStoryEntities,
   getStoryEvents,
   listProjects,
@@ -11,6 +12,7 @@ import {
 } from "./api/client";
 import type {
   ChapterViewModel,
+  OutlineSceneViewModel,
   ProjectViewModel,
   StoryEntityViewModel,
   StoryEventViewModel,
@@ -33,6 +35,7 @@ const phaseLabels = [
 ];
 
 const sceneMap = Object.fromEntries(scenesData.map((scene) => [scene.sceneId, scene]));
+const mockOutlineScenes = outlineData as OutlineSceneViewModel[];
 
 const mockProject = {
   projectId: projectData.projectId,
@@ -57,7 +60,13 @@ function buildYamlPreview(sceneId: string, project: ProjectViewModel) {
   const scene = sceneMap[sceneId];
 
   if (!scene) {
-    return "scenes: []";
+    return `schema_version: "1.0.0"
+meta:
+  project_id: "${project.projectId}"
+  title: "${project.title}"
+  workflow: "reader-outline-writer-validator"
+scenes: []
+# 当前仍等待真实 scenes 详情接口接入`;
   }
 
   const actionLines = scene.action.map((line) => `    - "${line}"`).join("\n");
@@ -86,7 +95,7 @@ ${dialogueLines}
 }
 
 function App() {
-  const [selectedSceneId, setSelectedSceneId] = useState(outlineData[0]?.sceneId ?? "");
+  const [selectedSceneId, setSelectedSceneId] = useState(mockOutlineScenes[0]?.sceneId ?? "");
   const [projectId, setProjectId] = useState(resolveProjectId);
   const [projectList, setProjectList] = useState<ProjectViewModel[]>([]);
   const [projectKeyword, setProjectKeyword] = useState("");
@@ -94,11 +103,14 @@ function App() {
   const [sourceTextInput, setSourceTextInput] = useState("");
   const [project, setProject] = useState<ProjectViewModel>(mockProject);
   const [chapters, setChapters] = useState<ChapterViewModel[]>([]);
+  const [outlineScenes, setOutlineScenes] = useState<OutlineSceneViewModel[]>(mockOutlineScenes);
   const [storyEntities, setStoryEntities] = useState<StoryEntityViewModel[]>([]);
   const [storyEvents, setStoryEvents] = useState<StoryEventViewModel[]>([]);
   const [connectionMode, setConnectionMode] = useState<WorkbenchConnectionMode>("mock-only");
   const [errorMessage, setErrorMessage] = useState("");
   const [projectActionMessage, setProjectActionMessage] = useState("");
+  const [outlineMessage, setOutlineMessage] = useState("");
+  const [outlineSourceMode, setOutlineSourceMode] = useState<"real" | "mock">("mock");
   const [storyAssetsMessage, setStoryAssetsMessage] = useState("");
   const [storyEventsMessage, setStoryEventsMessage] = useState("");
   const [analysisMessage, setAnalysisMessage] = useState("");
@@ -181,6 +193,9 @@ function App() {
       // 对齐开发契约：小说正文提交到 POST /api/projects/{projectId}/source。
       const nextChapters = await submitProjectSource(project.projectId, content);
       setChapters(nextChapters);
+      setOutlineScenes(mockOutlineScenes);
+      setOutlineSourceMode("mock");
+      setOutlineMessage("正文已更新，真实场景大纲生成后会自动替换当前 mock 大纲。");
       setStoryEntities([]);
       setStoryEvents([]);
       setSourceTextInput("");
@@ -367,6 +382,67 @@ function App() {
     };
   }, [connectionMode, project.projectId]);
 
+  useEffect(() => {
+    if (connectionMode !== "connected") {
+      setOutlineScenes(mockOutlineScenes);
+      setOutlineSourceMode("mock");
+      setOutlineMessage("");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadProjectOutline() {
+      try {
+        const scenes = await getProjectOutline(project.projectId);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (scenes.length === 0) {
+          setOutlineScenes(mockOutlineScenes);
+          setOutlineSourceMode("mock");
+          setOutlineMessage("真实场景大纲暂为空，当前继续使用 mock 大纲。");
+          return;
+        }
+
+        setOutlineScenes(scenes);
+        setOutlineSourceMode("real");
+        setOutlineMessage("已读取真实场景大纲，Scene 详情和 YAML 仍等待 scenes 接口接入。");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error ? error.message : "无法加载真实场景大纲，当前继续使用 mock。";
+        setOutlineScenes(mockOutlineScenes);
+        setOutlineSourceMode("mock");
+        setOutlineMessage(message);
+      }
+    }
+
+    void loadProjectOutline();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionMode, project.projectId]);
+
+  useEffect(() => {
+    if (outlineScenes.length === 0) {
+      setSelectedSceneId("");
+      return;
+    }
+
+    const exists = outlineScenes.some((scene) => scene.sceneId === selectedSceneId);
+
+    if (!exists) {
+      setSelectedSceneId(outlineScenes[0].sceneId);
+    }
+  }, [outlineScenes, selectedSceneId]);
+
   const connectionLabel =
     connectionMode === "connected"
       ? "真实项目"
@@ -509,7 +585,7 @@ function App() {
             </div>
             <div>
               <span>场景数量</span>
-              <strong>{outlineData.length}</strong>
+              <strong>{outlineScenes.length}</strong>
             </div>
             <div>
               <span>项目标题</span>
@@ -673,31 +749,36 @@ function App() {
         <section className="panel outline-panel">
           <div className="panel-header">
             <h2>场景大纲</h2>
-            <span>{outlineData.length} scenes</span>
+            <span>{outlineSourceMode === "real" ? `${outlineScenes.length} scenes` : "Mock 回退"}</span>
           </div>
-          <div className="scene-list">
-            {outlineData.map((scene) => (
-              <button
-                key={scene.sceneId}
-                type="button"
-                className={
-                  scene.sceneId === selectedSceneId ? "scene-card scene-card-active" : "scene-card"
-                }
-                onClick={() => setSelectedSceneId(scene.sceneId)}
-              >
-                <div className="scene-card-top">
-                  <strong>{scene.title}</strong>
-                  <span>{scene.sceneId}</span>
-                </div>
-                <p>{scene.purpose.plot}</p>
-                <div className="scene-card-tags">
-                  <span>{scene.slugline.intExt}</span>
-                  <span>{scene.slugline.timeOfDay}</span>
-                  <span>{scene.status}</span>
-                </div>
-              </button>
-            ))}
-          </div>
+          {outlineMessage ? <div className="notice-banner">{outlineMessage}</div> : null}
+          {outlineScenes.length === 0 ? (
+            <div className="empty-state empty-state-compact">当前暂无可展示的场景大纲。</div>
+          ) : (
+            <div className="scene-list">
+              {outlineScenes.map((scene) => (
+                <button
+                  key={scene.sceneId}
+                  type="button"
+                  className={
+                    scene.sceneId === selectedSceneId ? "scene-card scene-card-active" : "scene-card"
+                  }
+                  onClick={() => setSelectedSceneId(scene.sceneId)}
+                >
+                  <div className="scene-card-top">
+                    <strong>{scene.title}</strong>
+                    <span>{scene.sceneId}</span>
+                  </div>
+                  <p>{scene.purpose.plot}</p>
+                  <div className="scene-card-tags">
+                    <span>{scene.slugline.intExt}</span>
+                    <span>{scene.slugline.timeOfDay}</span>
+                    <span>{scene.status}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel scene-panel">
@@ -740,7 +821,11 @@ function App() {
               </div>
             </div>
           ) : (
-            <div className="empty-state">未找到当前场景详情。</div>
+            <div className="empty-state">
+              {outlineSourceMode === "real"
+                ? "真实场景大纲已接入，当前仍等待 scenes 详情接口替换 mock 明细。"
+                : "未找到当前场景详情。"}
+            </div>
           )}
         </section>
 

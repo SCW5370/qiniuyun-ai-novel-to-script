@@ -64,6 +64,28 @@ export type BackendStoryAnalysisResponse = {
   events: BackendStoryEventResponse[];
 };
 
+export type BackendOutlineSluglineResponse = {
+  intExt: string;
+  locationId: string;
+  timeOfDay: string;
+};
+
+export type BackendOutlinePurposeResponse = {
+  plot: string;
+  character: string;
+};
+
+export type BackendOutlineSceneResponse = {
+  sceneId: string;
+  seqNo: number;
+  title: string;
+  slugline: BackendOutlineSluglineResponse;
+  purpose: BackendOutlinePurposeResponse;
+  characters: string[];
+  sourceRefs: string[];
+  status: string;
+};
+
 export type WorkbenchConnectionMode = "connected" | "mock-only" | "error";
 
 export type ProjectViewModel = {
@@ -111,4 +133,22 @@ export type StoryAnalysisViewModel = {
   eventCount: number;
   entities: StoryEntityViewModel[];
   events: StoryEventViewModel[];
+};
+
+export type OutlineSceneViewModel = {
+  sceneId: string;
+  seqNo: number;
+  title: string;
+  slugline: {
+    intExt: string;
+    locationId: string;
+    timeOfDay: string;
+  };
+  purpose: {
+    plot: string;
+    character: string;
+  };
+  characters: string[];
+  sourceRefs: string[];
+  status: string;
 };
