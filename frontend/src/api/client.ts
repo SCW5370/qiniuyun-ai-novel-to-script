@@ -50,8 +50,7 @@ export function adaptProject(project: BackendProjectResponse): ProjectViewModel 
   const mapping = PHASE_LABELS[project.status];
 
   return {
-    projectId: String(project.id),
-    backendProjectId: project.id,
+    projectId: project.projectId,
     title: project.title,
     status: project.status,
     currentPhase: mapping.phase,

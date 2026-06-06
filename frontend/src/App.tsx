@@ -25,7 +25,6 @@ const sceneMap = Object.fromEntries(scenesData.map((scene) => [scene.sceneId, sc
 
 const mockProject = {
   projectId: projectData.projectId,
-  backendProjectId: Number(projectData.projectId.replace(/\D/g, "")) || 1,
   title: projectData.title,
   status: projectData.status,
   currentPhase: projectData.currentPhase,

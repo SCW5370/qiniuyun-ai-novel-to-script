@@ -15,7 +15,7 @@ export type BackendProjectStatus =
   | "FAILED";
 
 export type BackendProjectResponse = {
-  id: number;
+  projectId: string;
   title: string;
   status: BackendProjectStatus;
   createdAt: string;
@@ -35,7 +35,6 @@ export type WorkbenchConnectionMode = "connected" | "mock-only" | "error";
 
 export type ProjectViewModel = {
   projectId: string;
-  backendProjectId: number;
   title: string;
   status: BackendProjectStatus;
   currentPhase: string;
