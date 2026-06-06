@@ -124,6 +124,10 @@ button {
   grid-column: 1 / 2;
 }
 
+.asset-panel {
+  grid-column: 1 / 2;
+}
+
 .scene-panel {
   grid-column: 3 / 4;
   min-height: 320px;
@@ -246,6 +250,31 @@ button {
 }
 
 .chapter-card p {
+  margin: 0;
+  color: #475467;
+}
+
+.asset-list {
+  display: grid;
+  gap: 12px;
+}
+
+.asset-card {
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+  display: grid;
+  gap: 10px;
+}
+
+.asset-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.asset-card p {
   margin: 0;
   color: #475467;
 }
