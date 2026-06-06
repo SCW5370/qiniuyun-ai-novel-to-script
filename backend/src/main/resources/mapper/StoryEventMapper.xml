@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.novel2script.backend.story.StoryEventMapper">
+
+    <resultMap id="StoryEventResultMap" type="com.novel2script.backend.story.StoryEvent">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="eventId" column="event_id"/>
+        <result property="chapterId" column="chapter_id"/>
+        <result property="eventOrder" column="event_order"/>
+        <result property="title" column="title"/>
+        <result property="summary" column="summary"/>
+        <result property="sourceRefsJson" column="source_refs_json"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insertBatch">
+        insert into story_events (
+            project_id, event_id, chapter_id, event_order, title, summary, source_refs_json
+        )
+        values
+        <foreach collection="events" item="event" separator=",">
+            (
+                #{event.projectId},
+                #{event.eventId},
+                #{event.chapterId},
+                #{event.eventOrder},
+                #{event.title},
+                #{event.summary},
+                #{event.sourceRefsJson}
+            )
+        </foreach>
+    </insert>
+
+    <select id="findByProjectIdOrderByEventOrderAsc" resultMap="StoryEventResultMap">
+        select id, project_id, event_id, chapter_id, event_order, title, summary,
+               source_refs_json, created_at, updated_at
+        from story_events
+        where project_id = #{projectId}
+        order by event_order asc
+    </select>
+
+    <delete id="deleteByProjectId">
+        delete from story_events
+        where project_id = #{projectId}
+    </delete>
+</mapper>

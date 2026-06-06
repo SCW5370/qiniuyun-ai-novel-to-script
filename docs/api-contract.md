@@ -96,6 +96,49 @@ Rules:
 - `validationStatus` 枚举：`PASSED` `WARNING` `FAILED`
 - `warnings` 无内容时返回空数组
 
+## StoryEntity
+
+```json
+{
+  "entityId": "C001",
+  "entityType": "CHARACTER",
+  "canonicalName": "林舟",
+  "aliases": ["林舟", "阿舟"],
+  "profile": "角色小传或地点说明",
+  "sourceRefs": ["ch1"],
+  "createdAt": "2026-06-06T10:00:00+08:00",
+  "updatedAt": "2026-06-06T10:00:00+08:00"
+}
+```
+
+Rules:
+
+- `entityId` 角色使用 `C001` 递增格式，地点使用 `L001` 递增格式
+- `entityType` 枚举：`CHARACTER` `LOCATION`
+- `aliases` 和 `sourceRefs` 无内容时返回空数组
+- 当前 A 线首版为规则抽取结果，后续可替换为 LLM 抽取，但接口字段不变
+
+## StoryEvent
+
+```json
+{
+  "eventId": "E001",
+  "chapterId": 1,
+  "eventOrder": 1,
+  "title": "第一章 雨夜",
+  "summary": "林舟推门而入。",
+  "sourceRefs": ["ch1"],
+  "createdAt": "2026-06-06T10:00:00+08:00",
+  "updatedAt": "2026-06-06T10:00:00+08:00"
+}
+```
+
+Rules:
+
+- `eventId` 使用 `E001` 递增格式
+- `eventOrder` 为唯一排序依据
+- 故事事件接口不得占用 `GET /api/projects/{projectId}/events`，该路径保留给 SSE
+
 ## ValidationReport
 
 ```json
@@ -120,8 +163,11 @@ Rules:
 
 ## API Surface
 
+- `POST /api/projects/{projectId}/analyze`
 - `GET /api/projects/{projectId}`
 - `GET /api/projects/{projectId}/chapters`
+- `GET /api/projects/{projectId}/entities`
+- `GET /api/projects/{projectId}/story-events`
 - `GET /api/projects/{projectId}/outline`
 - `GET /api/projects/{projectId}/scenes`
 - `GET /api/projects/{projectId}/scenes/{sceneId}`
@@ -133,6 +179,7 @@ Rules:
 ## Current Integration Status
 
 - 已在 `main` 真实接入：`GET /api/projects/{projectId}`、`GET /api/projects/{projectId}/chapters`
+- A 线进行中：`POST /api/projects/{projectId}/analyze`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`
 - 当前仍使用 mock 的区域：`outline`、`scene detail`、`validation`、`yaml export preview`、`events`
 - 第一阶段策略：真实接项目和章节，场景与导出继续使用 mock，避免阻塞 A/B 并行开发
 

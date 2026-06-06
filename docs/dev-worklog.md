@@ -13,7 +13,9 @@
 - 已完成项目创建接口
 - 已完成原文提交和章节切分接口
 - 已完成基础后端工程骨架
+- 已完成规则版角色/地点/事件中间资产接口
 - 当前真实可用接口：`GET /api/projects/{projectId}`、`GET /api/projects/{projectId}/chapters`
+- 当前 A 线新增接口：`POST /api/projects/{projectId}/analyze`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`
 
 ## B Line Status
 
@@ -25,12 +27,9 @@
 
 ## Next A Line Dependencies
 
-- `GET /api/projects/{projectId}/outline`
-- `GET /api/projects/{projectId}/scenes`
-- `GET /api/projects/{projectId}/scenes/{sceneId}`
-- `POST /api/projects/{projectId}/validate`
-- `GET /api/projects/{projectId}/events`
-- `GET /api/projects/{projectId}/export?format=yaml`
+- 将规则抽取替换为 LLM 章节摘要、角色归一、地点表抽取
+- 为 B 线场景大纲生成提供稳定的 `entities` 和 `story-events`
+- `GET /api/projects/{projectId}/events` 保留给 SSE，不用于故事事件列表
 
 ## Next B Line Tasks
 

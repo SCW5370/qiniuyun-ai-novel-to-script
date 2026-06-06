@@ -46,6 +46,10 @@
 | `CREATED` | 项目已创建，尚未提交小说文本 |
 | `SOURCE_SUBMITTED` | 已提交小说文本，正在处理原文 |
 | `CHAPTERED` | 已完成章节切分 |
+| `ENTITY_READY` | 已完成角色、地点和事件等中间资产分析 |
+| `OUTLINED` | 已生成场景大纲 |
+| `SCENE_GENERATING` | 正在生成 Scene 级剧本 |
+| `COMPLETED` | 已完成剧本生成与导出 |
 | `FAILED` | 处理失败 |
 
 ## 创建项目
@@ -203,6 +207,119 @@ GET /api/projects/{projectId}/chapters
 }
 ```
 
+## 分析故事中间资产
+
+```http
+POST /api/projects/{projectId}/analyze
+```
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `projectId` | number | 项目 ID |
+
+处理规则：
+
+- 该接口依赖项目已经完成章节切分。
+- 首版使用规则抽取角色、地点和章节事件，后续可替换为 LLM 抽取。
+- 执行时会删除该项目旧的实体和事件分析结果，并写入新的结果。
+- 成功后项目状态更新为 `ENTITY_READY`。
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {
+    "projectId": 1,
+    "entities": [
+      {
+        "entityId": "C001",
+        "entityType": "CHARACTER",
+        "canonicalName": "林舟",
+        "aliases": ["林舟"],
+        "profile": "规则抽取的角色候选，后续可由 AI 补充人物小传、目标和说话风格。",
+        "sourceRefs": ["ch1"],
+        "createdAt": "2026-06-06T00:01:00",
+        "updatedAt": "2026-06-06T00:01:00"
+      }
+    ],
+    "events": [
+      {
+        "eventId": "E001",
+        "chapterId": 1,
+        "eventOrder": 1,
+        "title": "第一章 雨夜",
+        "summary": "林舟推门而入。",
+        "sourceRefs": ["ch1"],
+        "createdAt": "2026-06-06T00:01:00",
+        "updatedAt": "2026-06-06T00:01:00"
+      }
+    ]
+  }
+}
+```
+
+## 查询故事实体
+
+```http
+GET /api/projects/{projectId}/entities
+```
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": [
+    {
+      "entityId": "C001",
+      "entityType": "CHARACTER",
+      "canonicalName": "林舟",
+      "aliases": ["林舟"],
+      "profile": "规则抽取的角色候选，后续可由 AI 补充人物小传、目标和说话风格。",
+      "sourceRefs": ["ch1"],
+      "createdAt": "2026-06-06T00:01:00",
+      "updatedAt": "2026-06-06T00:01:00"
+    }
+  ]
+}
+```
+
+## 查询故事事件
+
+```http
+GET /api/projects/{projectId}/story-events
+```
+
+说明：
+
+- `GET /api/projects/{projectId}/events` 已保留给 SSE 进度流，故事事件列表使用 `/story-events`。
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": [
+    {
+      "eventId": "E001",
+      "chapterId": 1,
+      "eventOrder": 1,
+      "title": "第一章 雨夜",
+      "summary": "林舟推门而入。",
+      "sourceRefs": ["ch1"],
+      "createdAt": "2026-06-06T00:01:00",
+      "updatedAt": "2026-06-06T00:01:00"
+    }
+  ]
+}
+```
+
 ## 调试示例
 
 创建项目：
@@ -227,3 +344,20 @@ curl -X POST http://localhost:8080/api/projects/1/source ^
 curl http://localhost:8080/api/projects/1/chapters
 ```
 
+分析故事中间资产：
+
+```bash
+curl -X POST http://localhost:8080/api/projects/1/analyze
+```
+
+查询故事实体：
+
+```bash
+curl http://localhost:8080/api/projects/1/entities
+```
+
+查询故事事件：
+
+```bash
+curl http://localhost:8080/api/projects/1/story-events
+```

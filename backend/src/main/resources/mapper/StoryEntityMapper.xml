@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.novel2script.backend.story.StoryEntityMapper">
+
+    <resultMap id="StoryEntityResultMap" type="com.novel2script.backend.story.StoryEntity">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="entityId" column="entity_id"/>
+        <result property="entityType" column="entity_type"/>
+        <result property="canonicalName" column="canonical_name"/>
+        <result property="aliasesJson" column="aliases_json"/>
+        <result property="profile" column="profile"/>
+        <result property="sourceRefsJson" column="source_refs_json"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insertBatch">
+        insert into story_entities (
+            project_id, entity_id, entity_type, canonical_name, aliases_json, profile, source_refs_json
+        )
+        values
+        <foreach collection="entities" item="entity" separator=",">
+            (
+                #{entity.projectId},
+                #{entity.entityId},
+                #{entity.entityType},
+                #{entity.canonicalName},
+                #{entity.aliasesJson},
+                #{entity.profile},
+                #{entity.sourceRefsJson}
+            )
+        </foreach>
+    </insert>
+
+    <select id="findByProjectId" resultMap="StoryEntityResultMap">
+        select id, project_id, entity_id, entity_type, canonical_name, aliases_json, profile,
+               source_refs_json, created_at, updated_at
+        from story_entities
+        where project_id = #{projectId}
+        order by entity_type asc, entity_id asc
+    </select>
+
+    <delete id="deleteByProjectId">
+        delete from story_entities
+        where project_id = #{projectId}
+    </delete>
+</mapper>
