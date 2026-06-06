@@ -139,6 +139,26 @@ Rules:
 - `eventOrder` 为唯一排序依据
 - 故事事件接口不得占用 `GET /api/projects/{projectId}/events`，该路径保留给 SSE
 
+## StoryAnalysisResult
+
+```json
+{
+  "projectId": 1,
+  "status": "ENTITY_READY",
+  "entityCount": 2,
+  "eventCount": 3,
+  "entities": [],
+  "events": []
+}
+```
+
+Rules:
+
+- `POST /api/projects/{projectId}/analyze` 返回该结构
+- `entities` 使用 `StoryEntity` 数组结构
+- `events` 使用 `StoryEvent` 数组结构
+- 空数组返回 `[]`，不返回 `null`
+
 ## ValidationReport
 
 ```json

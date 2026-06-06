@@ -234,6 +234,9 @@ POST /api/projects/{projectId}/analyze
   "message": "ok",
   "data": {
     "projectId": 1,
+    "status": "ENTITY_READY",
+    "entityCount": 1,
+    "eventCount": 1,
     "entities": [
       {
         "entityId": "C001",
