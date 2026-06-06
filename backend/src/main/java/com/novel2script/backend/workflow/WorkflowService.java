@@ -2,6 +2,7 @@ package com.novel2script.backend.workflow;
 
 import com.novel2script.backend.project.Project;
 import com.novel2script.backend.project.ProjectService;
+import com.novel2script.backend.project.ProjectStatus;
 import com.novel2script.backend.scene.SceneGenerationService;
 import com.novel2script.backend.scene.dto.OutlineSceneResponse;
 import com.novel2script.backend.scene.dto.SceneScriptResponse;
@@ -99,6 +100,7 @@ public class WorkflowService {
             }
             yaml.append("    validation_status: \"").append(escapeYaml(scene.getValidationStatus())).append("\"\n");
         }
+        projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
         return yaml.toString();
     }
 
