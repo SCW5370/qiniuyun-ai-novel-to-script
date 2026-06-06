@@ -10,7 +10,8 @@ import {
   getStoryEvents,
   listProjects,
   regenerateProjectScene,
-  submitProjectSource
+  submitProjectSource,
+  validateProjectScenes
 } from "./api/client";
 import type {
   ChapterViewModel,
@@ -19,6 +20,7 @@ import type {
   SceneDetailViewModel,
   StoryEntityViewModel,
   StoryEventViewModel,
+  ValidationReportViewModel,
   WorkbenchConnectionMode
 } from "./api/types";
 import { appConfig } from "./config";
@@ -40,6 +42,7 @@ const phaseLabels = [
 const mockOutlineScenes = outlineData as OutlineSceneViewModel[];
 const mockSceneDetails = scenesData as SceneDetailViewModel[];
 const mockSceneMap = Object.fromEntries(mockSceneDetails.map((scene) => [scene.sceneId, scene]));
+const mockValidationReport = validationReport as ValidationReportViewModel;
 
 const mockProject = {
   projectId: projectData.projectId,
@@ -123,23 +126,31 @@ function App() {
   );
   const [storyAssetsMessage, setStoryAssetsMessage] = useState("");
   const [storyEventsMessage, setStoryEventsMessage] = useState("");
+  const [validationReportData, setValidationReportData] =
+    useState<ValidationReportViewModel>(mockValidationReport);
+  const [validationMessage, setValidationMessage] = useState("");
+  const [validationSourceMode, setValidationSourceMode] = useState<"real" | "mock">("mock");
   const [analysisMessage, setAnalysisMessage] = useState("");
   const [analysisStatus, setAnalysisStatus] = useState<"success" | "error" | "">("");
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isSubmittingSource, setIsSubmittingSource] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRegeneratingScene, setIsRegeneratingScene] = useState(false);
-  const mockSelectedWarnings = validationReport.items.filter(
+  const [isValidatingProject, setIsValidatingProject] = useState(false);
+  const mockSelectedWarnings = mockValidationReport.items.filter(
     (item) => item.sceneId === selectedSceneId
   );
   const selectedWarnings =
-    sceneDetailSourceMode === "real" && sceneDetail
-      ? sceneDetail.warnings.map((message, index) => ({
-          sceneId: sceneDetail.sceneId,
-          field: `warning_${index + 1}`,
-          message
-        }))
-      : mockSelectedWarnings;
+    validationSourceMode === "real"
+      ? validationReportData.items.filter((item) => item.sceneId === selectedSceneId)
+      : sceneDetailSourceMode === "real" && sceneDetail
+        ? sceneDetail.warnings.map((message, index) => ({
+            sceneId: sceneDetail.sceneId,
+            level: "warning" as const,
+            field: `warning_${index + 1}`,
+            message
+          }))
+        : mockSelectedWarnings;
 
   function switchProject(nextProjectId: string) {
     setProjectId(nextProjectId);
@@ -217,6 +228,9 @@ function App() {
       setSceneDetail(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null);
       setSceneDetailSourceMode("mock");
       setSceneDetailMessage("正文已更新，真实 Scene 详情生成后会自动替换当前 mock 内容。");
+      setValidationReportData(mockValidationReport);
+      setValidationSourceMode("mock");
+      setValidationMessage("正文已更新，真实校验结果生成后会自动替换当前 mock 报告。");
       setStoryEntities([]);
       setStoryEvents([]);
       setSourceTextInput("");
@@ -292,6 +306,31 @@ function App() {
     }
   }
 
+  async function handleValidateProject() {
+    if (connectionMode !== "connected" || isValidatingProject) {
+      return;
+    }
+
+    setIsValidatingProject(true);
+    setValidationMessage("");
+
+    try {
+      const report = await validateProjectScenes(project.projectId);
+      setValidationReportData(report);
+      setValidationSourceMode("real");
+      setValidationMessage("已读取真实校验结果，当前场景告警已按后端报告刷新。");
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法执行项目校验";
+      setValidationReportData(mockValidationReport);
+      setValidationSourceMode("mock");
+      setValidationMessage(message);
+    } finally {
+      setIsValidatingProject(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -337,16 +376,22 @@ function App() {
         if (appConfig.enableMockFallback) {
           setProject(mockProject);
           setChapters([]);
-          setStoryEntities([]);
-          setStoryEvents([]);
-          setConnectionMode("mock-only");
-          return;
-        }
-
-        setChapters([]);
         setStoryEntities([]);
         setStoryEvents([]);
-        setConnectionMode("error");
+        setValidationReportData(mockValidationReport);
+        setValidationSourceMode("mock");
+        setValidationMessage("");
+        setConnectionMode("mock-only");
+        return;
+      }
+
+      setChapters([]);
+      setStoryEntities([]);
+      setStoryEvents([]);
+      setValidationReportData(mockValidationReport);
+      setValidationSourceMode("mock");
+      setValidationMessage("");
+      setConnectionMode("error");
       }
     }
 
@@ -965,8 +1010,19 @@ function App() {
         <section className="panel validation-panel">
           <div className="panel-header">
             <h2>校验报告</h2>
-            <span>{sceneDetail?.validationStatus ?? validationReport.status}</span>
+            <div className="panel-header-actions">
+              <span>{validationSourceMode === "real" ? validationReportData.status : sceneDetail?.validationStatus ?? mockValidationReport.status}</span>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isValidatingProject}
+                onClick={() => void handleValidateProject()}
+              >
+                {isValidatingProject ? "校验中..." : "执行校验"}
+              </button>
+            </div>
           </div>
+          {validationMessage ? <div className="notice-banner">{validationMessage}</div> : null}
           <div className="validation-list">
             {selectedWarnings.length === 0 ? (
               <div className="validation-item validation-pass">当前场景无告警</div>

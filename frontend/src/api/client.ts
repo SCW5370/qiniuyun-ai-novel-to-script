@@ -9,13 +9,15 @@ import type {
   BackendStoryAnalysisResponse,
   BackendStoryEntityResponse,
   BackendStoryEventResponse,
+  BackendValidationReportResponse,
   ChapterViewModel,
   OutlineSceneViewModel,
   ProjectViewModel,
   SceneDetailViewModel,
   StoryAnalysisViewModel,
   StoryEntityViewModel,
-  StoryEventViewModel
+  StoryEventViewModel,
+  ValidationReportViewModel
 } from "./types";
 
 const PHASE_LABELS: Record<BackendProjectStatus, { phase: string; progress: number }> = {
@@ -162,6 +164,21 @@ export function adaptSceneDetail(scene: BackendSceneDetailResponse): SceneDetail
   };
 }
 
+export function adaptValidationReport(
+  report: BackendValidationReportResponse
+): ValidationReportViewModel {
+  return {
+    projectId: report.projectId,
+    status: report.status,
+    items: (report.items ?? []).map((item) => ({
+      sceneId: item.sceneId,
+      level: item.level,
+      field: item.field,
+      message: item.message
+    }))
+  };
+}
+
 export async function getProject(projectId: string) {
   const data = await requestJson<BackendProjectResponse>(`/projects/${projectId}`);
   return adaptProject(data);
@@ -233,4 +250,12 @@ export async function regenerateProjectScene(projectId: string, sceneId: string)
     buildJsonPostOptions()
   );
   return adaptSceneDetail(data);
+}
+
+export async function validateProjectScenes(projectId: string) {
+  const data = await requestJson<BackendValidationReportResponse>(
+    `/projects/${projectId}/validate`,
+    buildJsonPostOptions()
+  );
+  return adaptValidationReport(data);
 }

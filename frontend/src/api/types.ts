@@ -184,3 +184,31 @@ export type SceneDetailViewModel = {
   validationStatus: string;
   warnings: string[];
 };
+
+export type BackendValidationItemLevel = "warning" | "error";
+
+export type BackendValidationItemResponse = {
+  sceneId: string;
+  level: BackendValidationItemLevel;
+  field: string;
+  message: string;
+};
+
+export type BackendValidationReportResponse = {
+  projectId: string;
+  status: "PASSED" | "WARNING" | "FAILED";
+  items: BackendValidationItemResponse[];
+};
+
+export type ValidationItemViewModel = {
+  sceneId: string;
+  level: BackendValidationItemLevel;
+  field: string;
+  message: string;
+};
+
+export type ValidationReportViewModel = {
+  projectId: string;
+  status: "PASSED" | "WARNING" | "FAILED";
+  items: ValidationItemViewModel[];
+};
