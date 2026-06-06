@@ -16,7 +16,6 @@ export type BackendProjectStatus =
 
 export type BackendProjectResponse = {
   id: number;
-  projectId: string;
   title: string;
   status: BackendProjectStatus;
   createdAt: string;
