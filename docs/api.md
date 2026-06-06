@@ -80,6 +80,7 @@ POST /api/projects
   "message": "ok",
   "data": {
     "id": 1,
+    "projectId": "proj_20260606_001",
     "title": "雨夜旧书店",
     "status": "CREATED",
     "createdAt": "2026-06-06T00:00:00",
@@ -100,6 +101,11 @@ GET /api/projects/{projectId}
 | --- | --- | --- |
 | `projectId` | number | 项目 ID |
 
+说明：
+
+- 当前路径参数兼容数字数据库 ID 和字符串项目 ID，例如 `1` 或 `proj_20260606_001`。
+- 对外展示和前端路由优先使用字符串 `projectId`。
+
 成功响应：
 
 ```json
@@ -108,6 +114,7 @@ GET /api/projects/{projectId}
   "message": "ok",
   "data": {
     "id": 1,
+    "projectId": "proj_20260606_001",
     "title": "雨夜旧书店",
     "status": "CHAPTERED",
     "createdAt": "2026-06-06T00:00:00",

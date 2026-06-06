@@ -1,9 +1,11 @@
 create table if not exists projects (
     id bigint primary key auto_increment,
+    project_uid varchar(40) null,
     title varchar(120) not null,
     status varchar(40) not null,
     created_at timestamp not null default current_timestamp,
-    updated_at timestamp not null default current_timestamp on update current_timestamp
+    updated_at timestamp not null default current_timestamp on update current_timestamp,
+    unique key uk_projects_project_uid (project_uid)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
 
 create table if not exists source_chapters (

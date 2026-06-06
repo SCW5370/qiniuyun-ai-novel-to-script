@@ -31,6 +31,7 @@
 Rules:
 
 - `projectId` 使用字符串主键，格式 `proj_YYYYMMDD_xxx`
+- 后端响应中可额外返回数据库数字 `id`，仅用于调试和兼容旧接口
 - `status` 枚举：`CREATED` `SOURCE_SUBMITTED` `CHAPTERED` `ENTITY_READY` `OUTLINED` `SCENE_GENERATING` `COMPLETED` `FAILED`
 - `currentPhase` 给前端显示阶段文案
 - `progress` 固定为 `0-100`
@@ -206,6 +207,7 @@ Rules:
 ## Compatibility Rules
 
 - 字段统一使用小驼峰：`projectId`、`sceneId`、`sourceRefs`
+- URL 中的 `{projectId}` 优先使用字符串项目 ID；短期兼容数字数据库 ID
 - 时间统一 ISO 8601，时区为 `+08:00`
 - 空列表返回 `[]`，不返回 `null`
 - 契约一旦进入 `main`，改名必须先更新文档和 mock

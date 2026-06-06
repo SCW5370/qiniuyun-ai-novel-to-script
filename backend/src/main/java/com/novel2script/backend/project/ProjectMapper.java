@@ -15,5 +15,9 @@ public interface ProjectMapper {
 
     Optional<Project> findById(@Param("id") Long id);
 
+    Optional<Project> findByProjectUid(@Param("projectUid") String projectUid);
+
+    int updateProjectUid(@Param("id") Long id, @Param("projectUid") String projectUid);
+
     int updateStatus(@Param("id") Long id, @Param("status") ProjectStatus status);
 }

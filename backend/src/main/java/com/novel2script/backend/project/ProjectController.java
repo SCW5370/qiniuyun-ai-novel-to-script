@@ -27,7 +27,7 @@ public class ProjectController {
     }
 
     @GetMapping("/{projectId}")
-    public ApiResponse<ProjectResponse> getProject(@PathVariable Long projectId) {
+    public ApiResponse<ProjectResponse> getProject(@PathVariable String projectId) {
         return ApiResponse.ok(projectService.getProject(projectId));
     }
 }

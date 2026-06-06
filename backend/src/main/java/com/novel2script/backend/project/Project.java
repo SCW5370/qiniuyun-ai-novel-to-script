@@ -9,6 +9,8 @@ public class Project {
 
     private Long id;
 
+    private String projectUid;
+
     private String title;
 
     private ProjectStatus status;
@@ -31,6 +33,14 @@ public class Project {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getProjectUid() {
+        return projectUid;
+    }
+
+    public void setProjectUid(String projectUid) {
+        this.projectUid = projectUid;
     }
 
     public String getTitle() {

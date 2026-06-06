@@ -7,6 +7,7 @@ Content-Type: application/json; charset=utf-8
 }
 
 ### 提交小说文本
+# 将 2 替换成创建项目返回的 id，或替换成 projectId，例如 proj_20260606_002。
 POST http://localhost:8080/api/projects/2/source
 Content-Type: application/json; charset=utf-8
 
