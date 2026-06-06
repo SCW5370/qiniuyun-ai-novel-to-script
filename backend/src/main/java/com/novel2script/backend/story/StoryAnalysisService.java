@@ -3,6 +3,7 @@ package com.novel2script.backend.story;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.novel2script.backend.common.ProjectOperationLock;
 import com.novel2script.backend.project.ProjectService;
 import com.novel2script.backend.project.ProjectStatus;
 import com.novel2script.backend.scene.OutlineSceneMapper;
@@ -64,6 +65,8 @@ public class StoryAnalysisService {
 
     private final ObjectMapper objectMapper;
 
+    private final ProjectOperationLock projectOperationLock;
+
     public StoryAnalysisService(
             ProjectService projectService,
             SourceChapterMapper sourceChapterMapper,
@@ -72,7 +75,8 @@ public class StoryAnalysisService {
             OutlineSceneMapper outlineSceneMapper,
             SceneScriptMapper sceneScriptMapper,
             AiStoryAssetExtractor aiStoryAssetExtractor,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ProjectOperationLock projectOperationLock
     ) {
         this.projectService = projectService;
         this.sourceChapterMapper = sourceChapterMapper;
@@ -82,10 +86,15 @@ public class StoryAnalysisService {
         this.sceneScriptMapper = sceneScriptMapper;
         this.aiStoryAssetExtractor = aiStoryAssetExtractor;
         this.objectMapper = objectMapper;
+        this.projectOperationLock = projectOperationLock;
     }
 
     @Transactional
     public StoryAnalysisResponse analyze(String projectId) {
+        return projectOperationLock.execute(projectId, () -> analyzeLocked(projectId));
+    }
+
+    private StoryAnalysisResponse analyzeLocked(String projectId) {
         projectService.getProjectEntity(projectId);
         List<SourceChapter> chapters = sourceChapterMapper.findByProjectIdOrderByChapterNoAsc(projectId);
         if (chapters.isEmpty()) {
