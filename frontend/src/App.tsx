@@ -9,6 +9,7 @@ import {
   getStoryEntities,
   getStoryEvents,
   listProjects,
+  regenerateProjectScene,
   submitProjectSource
 } from "./api/client";
 import type {
@@ -127,6 +128,7 @@ function App() {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isSubmittingSource, setIsSubmittingSource] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isRegeneratingScene, setIsRegeneratingScene] = useState(false);
   const mockSelectedWarnings = validationReport.items.filter(
     (item) => item.sceneId === selectedSceneId
   );
@@ -259,6 +261,34 @@ function App() {
       setAnalysisMessage(message);
     } finally {
       setIsAnalyzing(false);
+    }
+  }
+
+  async function handleRegenerateScene() {
+    if (
+      connectionMode !== "connected" ||
+      outlineSourceMode !== "real" ||
+      !selectedSceneId ||
+      isRegeneratingScene
+    ) {
+      return;
+    }
+
+    setIsRegeneratingScene(true);
+    setSceneDetailMessage("");
+
+    try {
+      const detail = await regenerateProjectScene(project.projectId, selectedSceneId);
+      setSceneDetail(detail);
+      setSceneDetailSourceMode("real");
+      setSceneDetailMessage("真实 Scene 已重新生成，详情和 YAML 预览已刷新。");
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法重新生成当前 Scene";
+      setSceneDetailMessage(message);
+    } finally {
+      setIsRegeneratingScene(false);
     }
   }
 
@@ -861,7 +891,22 @@ function App() {
         <section className="panel scene-panel">
           <div className="panel-header">
             <h2>Scene 详情</h2>
-            <span>{sceneDetail?.validationStatus ?? "未选中"}</span>
+            <div className="panel-header-actions">
+              <span>{sceneDetail?.validationStatus ?? "未选中"}</span>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={
+                  connectionMode !== "connected" ||
+                  outlineSourceMode !== "real" ||
+                  !selectedSceneId ||
+                  isRegeneratingScene
+                }
+                onClick={() => void handleRegenerateScene()}
+              >
+                {isRegeneratingScene ? "生成中..." : "重新生成"}
+              </button>
+            </div>
           </div>
           {sceneDetailMessage ? <div className="notice-banner">{sceneDetailMessage}</div> : null}
           {sceneDetail ? (

@@ -226,3 +226,11 @@ export async function getProjectScene(projectId: string, sceneId: string) {
   );
   return adaptSceneDetail(data);
 }
+
+export async function regenerateProjectScene(projectId: string, sceneId: string) {
+  const data = await requestJson<BackendSceneDetailResponse>(
+    `/projects/${projectId}/scenes/${sceneId}/regenerate`,
+    buildJsonPostOptions()
+  );
+  return adaptSceneDetail(data);
+}
