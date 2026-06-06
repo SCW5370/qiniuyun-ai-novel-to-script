@@ -1,0 +1,27 @@
+### 创建项目
+POST http://localhost:8080/api/projects
+Content-Type: application/json; charset=utf-8
+
+{
+  "title": "雨夜旧书店"
+}
+
+### 提交小说文本
+POST http://localhost:8080/api/projects/2/source
+Content-Type: application/json; charset=utf-8
+
+{
+  "content": "第一章 雨夜\n林舟推门而入，浑身湿透。\n沈老板抬起头，看了他一眼。\n林舟说，他想找一本可能不存在的书。\n\n第二章 旧书店\n旧书店里灯光昏黄，雨声敲在窗上。\n沈老板从抽屉里拿出一张残页。\n林舟决定继续追查手稿的下落。"
+}
+
+### 查询章节
+GET http://localhost:8080/api/projects/2/chapters
+
+### 分析角色、地点、事件
+POST http://localhost:8080/api/projects/2/analyze
+
+### 查询角色和地点
+GET http://localhost:8080/api/projects/2/entities
+
+### 查询故事事件
+GET http://localhost:8080/api/projects/2/story-events
