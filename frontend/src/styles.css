@@ -128,6 +128,10 @@ button {
   grid-column: 1 / 2;
 }
 
+.event-panel {
+  grid-column: 1 / 2;
+}
+
 .scene-panel {
   grid-column: 3 / 4;
   min-height: 320px;
@@ -279,6 +283,31 @@ button {
   color: #475467;
 }
 
+.event-list {
+  display: grid;
+  gap: 12px;
+}
+
+.event-card {
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+  display: grid;
+  gap: 10px;
+}
+
+.event-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.event-card p {
+  margin: 0;
+  color: #475467;
+}
+
 .scene-list {
   display: grid;
   gap: 12px;
@@ -409,6 +438,10 @@ button {
 
   .project-panel,
   .progress-panel,
+  .chapter-panel,
+  .asset-panel,
+  .event-panel,
+  .validation-panel,
   .outline-panel,
   .scene-panel,
   .yaml-panel {

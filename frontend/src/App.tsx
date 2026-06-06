@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
-import { getProject, getProjectChapters, getStoryEntities } from "./api/client";
+import {
+  getProject,
+  getProjectChapters,
+  getStoryEntities,
+  getStoryEvents
+} from "./api/client";
 import type {
   ChapterViewModel,
   ProjectViewModel,
   StoryEntityViewModel,
+  StoryEventViewModel,
   WorkbenchConnectionMode
 } from "./api/types";
 import { appConfig } from "./config";
@@ -77,9 +83,11 @@ function App() {
   const [project, setProject] = useState<ProjectViewModel>(mockProject);
   const [chapters, setChapters] = useState<ChapterViewModel[]>([]);
   const [storyEntities, setStoryEntities] = useState<StoryEntityViewModel[]>([]);
+  const [storyEvents, setStoryEvents] = useState<StoryEventViewModel[]>([]);
   const [connectionMode, setConnectionMode] = useState<WorkbenchConnectionMode>("mock-only");
   const [errorMessage, setErrorMessage] = useState("");
   const [storyAssetsMessage, setStoryAssetsMessage] = useState("");
+  const [storyEventsMessage, setStoryEventsMessage] = useState("");
   const selectedScene = sceneMap[selectedSceneId];
   const selectedWarnings = validationReport.items.filter(
     (item) => item.sceneId === selectedSceneId
@@ -116,12 +124,14 @@ function App() {
           setProject(mockProject);
           setChapters([]);
           setStoryEntities([]);
+          setStoryEvents([]);
           setConnectionMode("mock-only");
           return;
         }
 
         setChapters([]);
         setStoryEntities([]);
+        setStoryEvents([]);
         setConnectionMode("error");
       }
     }
@@ -164,6 +174,43 @@ function App() {
     }
 
     void loadStoryEntities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionMode, project.projectId]);
+
+  useEffect(() => {
+    if (connectionMode !== "connected") {
+      setStoryEvents([]);
+      setStoryEventsMessage("");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadStoryEvents() {
+      try {
+        const events = await getStoryEvents(project.projectId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setStoryEvents(events);
+        setStoryEventsMessage("");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "无法加载故事事件";
+        setStoryEvents([]);
+        setStoryEventsMessage(message);
+      }
+    }
+
+    void loadStoryEvents();
 
     return () => {
       cancelled = true;
@@ -311,6 +358,45 @@ function App() {
                     ))}
                   </div>
                   <p>{entity.profile}</p>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="panel event-panel">
+          <div className="panel-header">
+            <h2>故事事件</h2>
+            <span>{connectionMode === "connected" ? `${storyEvents.length} events` : "等待真实接口"}</span>
+          </div>
+          {connectionMode !== "connected" ? (
+            <div className="empty-state empty-state-compact">
+              当前仍使用 mock 场景工作台。A 线故事事件接口接通后，这里会显示真实事件时间线。
+            </div>
+          ) : storyEventsMessage ? (
+            <div className="empty-state empty-state-compact">{storyEventsMessage}</div>
+          ) : storyEvents.length === 0 ? (
+            <div className="empty-state empty-state-compact">
+              当前项目暂无故事事件，可在后端先执行故事中间资产分析。
+            </div>
+          ) : (
+            <div className="event-list">
+              {storyEvents.map((event) => (
+                <article key={event.eventId} className="event-card">
+                  <div className="event-card-top">
+                    <strong>{event.title}</strong>
+                    <span>{event.eventId}</span>
+                  </div>
+                  <div className="pill-list">
+                    <span className="inline-pill">Chapter {event.chapterId}</span>
+                    <span className="inline-pill">Order {event.eventOrder}</span>
+                    {event.sourceRefs.map((ref) => (
+                      <span key={`${event.eventId}-${ref}`} className="inline-pill">
+                        {ref}
+                      </span>
+                    ))}
+                  </div>
+                  <p>{event.summary}</p>
                 </article>
               ))}
             </div>
