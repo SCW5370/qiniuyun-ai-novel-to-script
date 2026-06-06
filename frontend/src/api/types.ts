@@ -212,3 +212,31 @@ export type ValidationReportViewModel = {
   status: "PASSED" | "WARNING" | "FAILED";
   items: ValidationItemViewModel[];
 };
+
+export type ProgressStreamEventName =
+  | "job.started"
+  | "phase.changed"
+  | "outline.ready"
+  | "scene.done"
+  | "validation.warn"
+  | "job.completed"
+  | "job.failed";
+
+export type ProgressStreamPayload = {
+  projectId: string;
+  progress?: number;
+  phase?: string;
+  message?: string;
+  jobType?: string;
+  sceneId?: string;
+  sceneCount?: number;
+  validationStatus?: string;
+  field?: string;
+  exportReady?: boolean;
+  errorCode?: string;
+};
+
+export type ProgressStreamEvent = {
+  event: ProgressStreamEventName;
+  data: ProgressStreamPayload;
+};

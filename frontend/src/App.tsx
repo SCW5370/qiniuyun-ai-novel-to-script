@@ -17,6 +17,7 @@ import {
 import type {
   ChapterViewModel,
   OutlineSceneViewModel,
+  ProgressStreamEvent,
   ProjectViewModel,
   SceneDetailViewModel,
   StoryEntityViewModel,
@@ -39,6 +40,17 @@ const phaseLabels = [
   "结构校验",
   "YAML 导出"
 ];
+
+const phaseKeyToLabel: Record<string, string> = {
+  created: "项目创建",
+  source_submitted: "文本处理",
+  chaptered: "文本处理",
+  entity_ready: "实体抽取",
+  outlined: "场景规划",
+  scene_generating: "Scene 生成",
+  completed: "YAML 导出",
+  failed: "Scene 生成"
+};
 
 const mockOutlineScenes = outlineData as OutlineSceneViewModel[];
 const mockSceneDetails = scenesData as SceneDetailViewModel[];
@@ -148,6 +160,10 @@ function App() {
   );
   const [yamlPreviewMessage, setYamlPreviewMessage] = useState("");
   const [yamlSourceMode, setYamlSourceMode] = useState<"real" | "mock">("mock");
+  const [progressStreamMessage, setProgressStreamMessage] = useState("");
+  const [progressStreamPhase, setProgressStreamPhase] = useState("");
+  const [progressStreamValue, setProgressStreamValue] = useState<number | null>(null);
+  const [progressSourceMode, setProgressSourceMode] = useState<"real" | "static">("static");
   const [analysisMessage, setAnalysisMessage] = useState("");
   const [analysisStatus, setAnalysisStatus] = useState<"success" | "error" | "">("");
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -179,6 +195,30 @@ function App() {
   function switchProject(nextProjectId: string) {
     setProjectId(nextProjectId);
     window.history.replaceState(null, "", `?projectId=${encodeURIComponent(nextProjectId)}`);
+  }
+
+  function applyProgressEvent(progressEvent: ProgressStreamEvent) {
+    const { event, data } = progressEvent;
+
+    if (typeof data.progress === "number") {
+      setProgressStreamValue(data.progress);
+    }
+
+    if (typeof data.message === "string") {
+      setProgressStreamMessage(data.message);
+    }
+
+    if (typeof data.phase === "string") {
+      setProgressStreamPhase(data.phase);
+    } else if (event === "outline.ready") {
+      setProgressStreamPhase("outlined");
+    } else if (event === "scene.done") {
+      setProgressStreamPhase("scene_generating");
+    } else if (event === "job.completed") {
+      setProgressStreamPhase("completed");
+    }
+
+    setProgressSourceMode("real");
   }
 
   async function loadProjectDetail(nextProjectId: string) {
@@ -260,6 +300,10 @@ function App() {
       );
       setYamlSourceMode("mock");
       setYamlPreviewMessage("正文已更新，真实 YAML 导出就绪后会替换当前 mock 预览。");
+      setProgressStreamMessage("");
+      setProgressStreamPhase("");
+      setProgressStreamValue(null);
+      setProgressSourceMode("static");
       setStoryEntities([]);
       setStoryEvents([]);
       setSourceTextInput("");
@@ -451,6 +495,10 @@ function App() {
           );
           setYamlSourceMode("mock");
           setYamlPreviewMessage("");
+          setProgressStreamMessage("");
+          setProgressStreamPhase("");
+          setProgressStreamValue(null);
+          setProgressSourceMode("static");
           setConnectionMode("mock-only");
           return;
         }
@@ -466,6 +514,10 @@ function App() {
         );
         setYamlSourceMode("mock");
         setYamlPreviewMessage("");
+        setProgressStreamMessage("");
+        setProgressStreamPhase("");
+        setProgressStreamValue(null);
+        setProgressSourceMode("static");
         setConnectionMode("error");
       }
     }
@@ -686,12 +738,70 @@ function App() {
     setYamlPreviewContent(buildYamlPreview(sceneDetail, project));
   }, [sceneDetail, project, yamlSourceMode]);
 
+  useEffect(() => {
+    if (connectionMode !== "connected") {
+      setProgressStreamMessage("");
+      setProgressStreamPhase("");
+      setProgressStreamValue(null);
+      setProgressSourceMode("static");
+      return;
+    }
+
+    const eventsUrl = `${appConfig.apiBaseUrl}/projects/${project.projectId}/events`;
+    const eventSource = new EventSource(eventsUrl);
+    const eventNames = [
+      "job.started",
+      "phase.changed",
+      "outline.ready",
+      "scene.done",
+      "validation.warn",
+      "job.completed",
+      "job.failed"
+    ];
+
+    function handleStreamMessage(rawMessage: MessageEvent<string>) {
+      try {
+        const parsed = JSON.parse(rawMessage.data) as ProgressStreamEvent;
+
+        if (parsed?.data?.projectId !== project.projectId) {
+          return;
+        }
+
+        applyProgressEvent(parsed);
+      } catch {
+        // Ignore malformed stream payloads and keep static fallback.
+      }
+    }
+
+    function handleStreamError() {
+      setProgressSourceMode("static");
+    }
+
+    eventSource.onmessage = handleStreamMessage;
+    eventSource.onerror = handleStreamError;
+    eventNames.forEach((eventName) => {
+      eventSource.addEventListener(eventName, handleStreamMessage as EventListener);
+    });
+
+    return () => {
+      eventNames.forEach((eventName) => {
+        eventSource.removeEventListener(eventName, handleStreamMessage as EventListener);
+      });
+      eventSource.close();
+    };
+  }, [connectionMode, project.projectId]);
+
   const connectionLabel =
     connectionMode === "connected"
       ? "真实项目"
       : connectionMode === "mock-only"
         ? "Mock 回退"
         : "连接失败";
+  const displayProgress =
+    progressSourceMode === "real" && progressStreamValue != null ? progressStreamValue : project.progress;
+  const activePhaseLabel =
+    phaseKeyToLabel[progressSourceMode === "real" && progressStreamPhase ? progressStreamPhase : project.currentPhase] ??
+    "Scene 生成";
 
   return (
     <div className="app-shell">
@@ -840,14 +950,20 @@ function App() {
         <section className="panel progress-panel">
           <div className="panel-header">
             <h2>流程阶段</h2>
-            <span>{project.progress}%</span>
+            <div className="panel-header-actions">
+              <span>{displayProgress}%</span>
+              <span className={progressSourceMode === "real" ? "status-pill" : "status-pill status-pill-warn"}>
+                {progressSourceMode === "real" ? "实时进度" : "静态阶段"}
+              </span>
+            </div>
           </div>
           <div className="progress-bar">
-            <span style={{ width: `${project.progress}%` }} />
+            <span style={{ width: `${displayProgress}%` }} />
           </div>
+          {progressStreamMessage ? <div className="notice-banner">{progressStreamMessage}</div> : null}
           <ol className="phase-list">
             {phaseLabels.map((label) => {
-              const isActive = label === "Scene 生成";
+              const isActive = label === activePhaseLabel;
               return (
                 <li key={label} className={isActive ? "phase phase-active" : "phase"}>
                   <span className="phase-index">
