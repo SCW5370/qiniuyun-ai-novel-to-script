@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   analyzeStoryAssets,
   createProject,
+  exportProjectYaml,
   getProject,
   getProjectChapters,
   getProjectOutline,
@@ -100,6 +101,18 @@ ${dialogueLines}
     source_refs: [${sourceRefLines}]`;
 }
 
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/yaml;charset=utf-8" });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 function App() {
   const [selectedSceneId, setSelectedSceneId] = useState(mockOutlineScenes[0]?.sceneId ?? "");
   const [projectId, setProjectId] = useState(resolveProjectId);
@@ -130,6 +143,11 @@ function App() {
     useState<ValidationReportViewModel>(mockValidationReport);
   const [validationMessage, setValidationMessage] = useState("");
   const [validationSourceMode, setValidationSourceMode] = useState<"real" | "mock">("mock");
+  const [yamlPreviewContent, setYamlPreviewContent] = useState(
+    buildYamlPreview(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null, mockProject)
+  );
+  const [yamlPreviewMessage, setYamlPreviewMessage] = useState("");
+  const [yamlSourceMode, setYamlSourceMode] = useState<"real" | "mock">("mock");
   const [analysisMessage, setAnalysisMessage] = useState("");
   const [analysisStatus, setAnalysisStatus] = useState<"success" | "error" | "">("");
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -137,6 +155,7 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRegeneratingScene, setIsRegeneratingScene] = useState(false);
   const [isValidatingProject, setIsValidatingProject] = useState(false);
+  const [isExportingYaml, setIsExportingYaml] = useState(false);
   const canLoadGeneratedScenes =
     project.status === "ENTITY_READY" ||
     project.status === "OUTLINED" ||
@@ -236,6 +255,11 @@ function App() {
       setValidationReportData(mockValidationReport);
       setValidationSourceMode("mock");
       setValidationMessage("正文已更新，真实校验结果生成后会自动替换当前 mock 报告。");
+      setYamlPreviewContent(
+        buildYamlPreview(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null, project)
+      );
+      setYamlSourceMode("mock");
+      setYamlPreviewMessage("正文已更新，真实 YAML 导出就绪后会替换当前 mock 预览。");
       setStoryEntities([]);
       setStoryEvents([]);
       setSourceTextInput("");
@@ -346,6 +370,32 @@ function App() {
     }
   }
 
+  async function handleExportYaml() {
+    if (connectionMode !== "connected" || isExportingYaml) {
+      return;
+    }
+
+    setIsExportingYaml(true);
+    setYamlPreviewMessage("");
+
+    try {
+      const yamlContent = await exportProjectYaml(project.projectId);
+      setYamlPreviewContent(yamlContent);
+      setYamlSourceMode("real");
+      setYamlPreviewMessage("已导出真实 YAML，并同步刷新当前预览。");
+      downloadTextFile(`${project.projectId}.yaml`, yamlContent);
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法导出项目 YAML";
+      setYamlPreviewContent(buildYamlPreview(sceneDetail, project));
+      setYamlSourceMode("mock");
+      setYamlPreviewMessage(message);
+    } finally {
+      setIsExportingYaml(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -391,22 +441,32 @@ function App() {
         if (appConfig.enableMockFallback) {
           setProject(mockProject);
           setChapters([]);
+          setStoryEntities([]);
+          setStoryEvents([]);
+          setValidationReportData(mockValidationReport);
+          setValidationSourceMode("mock");
+          setValidationMessage("");
+          setYamlPreviewContent(
+            buildYamlPreview(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null, mockProject)
+          );
+          setYamlSourceMode("mock");
+          setYamlPreviewMessage("");
+          setConnectionMode("mock-only");
+          return;
+        }
+
+        setChapters([]);
         setStoryEntities([]);
         setStoryEvents([]);
         setValidationReportData(mockValidationReport);
         setValidationSourceMode("mock");
         setValidationMessage("");
-        setConnectionMode("mock-only");
-        return;
-      }
-
-      setChapters([]);
-      setStoryEntities([]);
-      setStoryEvents([]);
-      setValidationReportData(mockValidationReport);
-      setValidationSourceMode("mock");
-      setValidationMessage("");
-      setConnectionMode("error");
+        setYamlPreviewContent(
+          buildYamlPreview(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null, mockProject)
+        );
+        setYamlSourceMode("mock");
+        setYamlPreviewMessage("");
+        setConnectionMode("error");
       }
     }
 
@@ -617,6 +677,14 @@ function App() {
       cancelled = true;
     };
   }, [connectionMode, project.projectId, selectedSceneId, canLoadGeneratedScenes]);
+
+  useEffect(() => {
+    if (yamlSourceMode === "real") {
+      return;
+    }
+
+    setYamlPreviewContent(buildYamlPreview(sceneDetail, project));
+  }, [sceneDetail, project, yamlSourceMode]);
 
   const connectionLabel =
     connectionMode === "connected"
@@ -1023,11 +1091,20 @@ function App() {
         <section className="panel yaml-panel">
           <div className="panel-header">
             <h2>YAML 预览</h2>
-            <button className="ghost-button" type="button">
-              导出 YAML
-            </button>
+            <div className="panel-header-actions">
+              <span>{yamlSourceMode === "real" ? "真实导出" : "Mock 预览"}</span>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isExportingYaml}
+                onClick={() => void handleExportYaml()}
+              >
+                {isExportingYaml ? "导出中..." : "导出 YAML"}
+              </button>
+            </div>
           </div>
-          <pre className="code-block">{buildYamlPreview(sceneDetail, project)}</pre>
+          {yamlPreviewMessage ? <div className="notice-banner">{yamlPreviewMessage}</div> : null}
+          <pre className="code-block">{yamlPreviewContent}</pre>
         </section>
 
         <section className="panel validation-panel">

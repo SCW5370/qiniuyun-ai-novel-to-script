@@ -55,6 +55,32 @@ async function requestJson<T>(path: string, options: RequestInit = {}) {
   return payload.data;
 }
 
+async function requestText(path: string, options: RequestInit = {}) {
+  const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
+    ...options,
+    headers: {
+      ...options.headers
+    }
+  });
+
+  const text = await response.text();
+
+  if (response.ok) {
+    return text;
+  }
+
+  let parsedMessage = "";
+
+  try {
+    const payload = JSON.parse(text) as ApiEnvelope<unknown>;
+    parsedMessage = payload.message || "";
+  } catch {
+    parsedMessage = "";
+  }
+
+  throw new Error(parsedMessage || text || `Request failed for ${path}`);
+}
+
 function buildJsonPostOptions(body?: unknown): RequestInit {
   return {
     method: "POST",
@@ -258,4 +284,8 @@ export async function validateProjectScenes(projectId: string) {
     buildJsonPostOptions()
   );
   return adaptValidationReport(data);
+}
+
+export async function exportProjectYaml(projectId: string) {
+  return requestText(`/projects/${projectId}/export?format=yaml`);
 }
