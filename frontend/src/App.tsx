@@ -137,6 +137,11 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRegeneratingScene, setIsRegeneratingScene] = useState(false);
   const [isValidatingProject, setIsValidatingProject] = useState(false);
+  const canLoadGeneratedScenes =
+    project.status === "ENTITY_READY" ||
+    project.status === "OUTLINED" ||
+    project.status === "SCENE_GENERATING" ||
+    project.status === "COMPLETED";
   const mockSelectedWarnings = mockValidationReport.items.filter(
     (item) => item.sceneId === selectedSceneId
   );
@@ -267,6 +272,16 @@ function App() {
       setStoryEventsMessage("");
       setAnalysisStatus("success");
       setAnalysisMessage(`分析完成，已同步 ${result.entityCount} 个实体和 ${result.eventCount} 个事件。`);
+      try {
+        const scenes = await getProjectOutline(project.projectId);
+        if (scenes.length > 0) {
+          setOutlineScenes(scenes);
+          setOutlineSourceMode("real");
+          setOutlineMessage("已读取真实场景大纲。");
+        }
+      } catch {
+        setOutlineMessage("故事资产已生成，场景大纲稍后会自动加载。");
+      }
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
     } catch (error) {
@@ -307,7 +322,7 @@ function App() {
   }
 
   async function handleValidateProject() {
-    if (connectionMode !== "connected" || isValidatingProject) {
+    if (connectionMode !== "connected" || outlineSourceMode !== "real" || isValidatingProject) {
       return;
     }
 
@@ -477,10 +492,14 @@ function App() {
   }, [connectionMode, project.projectId]);
 
   useEffect(() => {
-    if (connectionMode !== "connected") {
+    if (connectionMode !== "connected" || !canLoadGeneratedScenes) {
       setOutlineScenes(mockOutlineScenes);
       setOutlineSourceMode("mock");
-      setOutlineMessage("");
+      setOutlineMessage(
+        connectionMode === "connected"
+          ? "请先执行故事中间资产分析，之后会自动加载真实场景大纲。"
+          : ""
+      );
       return;
     }
 
@@ -522,7 +541,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [connectionMode, project.projectId]);
+  }, [connectionMode, project.projectId, canLoadGeneratedScenes]);
 
   useEffect(() => {
     if (outlineScenes.length === 0) {
@@ -547,10 +566,14 @@ function App() {
       return;
     }
 
-    if (connectionMode !== "connected") {
+    if (connectionMode !== "connected" || !canLoadGeneratedScenes) {
       setSceneDetail(mockScene);
       setSceneDetailSourceMode(mockScene ? "mock" : "empty");
-      setSceneDetailMessage("");
+      setSceneDetailMessage(
+        connectionMode === "connected"
+          ? "请先执行故事中间资产分析，之后会自动加载真实 Scene 详情。"
+          : ""
+      );
       return;
     }
 
@@ -593,7 +616,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [connectionMode, project.projectId, selectedSceneId]);
+  }, [connectionMode, project.projectId, selectedSceneId, canLoadGeneratedScenes]);
 
   const connectionLabel =
     connectionMode === "connected"
@@ -1015,7 +1038,7 @@ function App() {
               <button
                 className="ghost-button"
                 type="button"
-                disabled={connectionMode !== "connected" || isValidatingProject}
+                disabled={connectionMode !== "connected" || outlineSourceMode !== "real" || isValidatingProject}
                 onClick={() => void handleValidateProject()}
               >
                 {isValidatingProject ? "校验中..." : "执行校验"}
