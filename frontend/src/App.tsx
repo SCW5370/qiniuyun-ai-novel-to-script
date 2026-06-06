@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { getProject, getProjectChapters } from "./api/client";
+import { getProject, getProjectChapters, getStoryEntities } from "./api/client";
 import type {
   ChapterViewModel,
   ProjectViewModel,
+  StoryEntityViewModel,
   WorkbenchConnectionMode
 } from "./api/types";
 import { appConfig } from "./config";
@@ -75,8 +76,10 @@ function App() {
   const [projectId] = useState(resolveProjectId);
   const [project, setProject] = useState<ProjectViewModel>(mockProject);
   const [chapters, setChapters] = useState<ChapterViewModel[]>([]);
+  const [storyEntities, setStoryEntities] = useState<StoryEntityViewModel[]>([]);
   const [connectionMode, setConnectionMode] = useState<WorkbenchConnectionMode>("mock-only");
   const [errorMessage, setErrorMessage] = useState("");
+  const [storyAssetsMessage, setStoryAssetsMessage] = useState("");
   const selectedScene = sceneMap[selectedSceneId];
   const selectedWarnings = validationReport.items.filter(
     (item) => item.sceneId === selectedSceneId
@@ -112,11 +115,13 @@ function App() {
         if (appConfig.enableMockFallback) {
           setProject(mockProject);
           setChapters([]);
+          setStoryEntities([]);
           setConnectionMode("mock-only");
           return;
         }
 
         setChapters([]);
+        setStoryEntities([]);
         setConnectionMode("error");
       }
     }
@@ -127,6 +132,43 @@ function App() {
       cancelled = true;
     };
   }, [projectId]);
+
+  useEffect(() => {
+    if (connectionMode !== "connected") {
+      setStoryEntities([]);
+      setStoryAssetsMessage("");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadStoryEntities() {
+      try {
+        const entities = await getStoryEntities(project.projectId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setStoryEntities(entities);
+        setStoryAssetsMessage("");
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "无法加载故事实体";
+        setStoryEntities([]);
+        setStoryAssetsMessage(message);
+      }
+    }
+
+    void loadStoryEntities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionMode, project.projectId]);
 
   const connectionLabel =
     connectionMode === "connected"
@@ -233,6 +275,44 @@ function App() {
           ) : (
             <div className="empty-state empty-state-compact">
               当前仍使用 mock 场景工作台。A 线章节接口接通后，这里会自动显示真实章节列表。
+            </div>
+          )}
+        </section>
+
+        <section className="panel asset-panel">
+          <div className="panel-header">
+            <h2>角色与地点</h2>
+            <span>{connectionMode === "connected" ? `${storyEntities.length} assets` : "等待真实接口"}</span>
+          </div>
+          {connectionMode !== "connected" ? (
+            <div className="empty-state empty-state-compact">
+              当前仍使用 mock 场景工作台。A 线实体接口接通后，这里会显示真实角色与地点资产。
+            </div>
+          ) : storyAssetsMessage ? (
+            <div className="empty-state empty-state-compact">{storyAssetsMessage}</div>
+          ) : storyEntities.length === 0 ? (
+            <div className="empty-state empty-state-compact">
+              当前项目暂无实体资产，可在后端先执行故事中间资产分析。
+            </div>
+          ) : (
+            <div className="asset-list">
+              {storyEntities.map((entity) => (
+                <article key={entity.entityId} className="asset-card">
+                  <div className="asset-card-top">
+                    <strong>{entity.canonicalName}</strong>
+                    <span>{entity.entityId}</span>
+                  </div>
+                  <div className="pill-list">
+                    <span className="inline-pill">{entity.entityType}</span>
+                    {entity.aliases.map((alias) => (
+                      <span key={`${entity.entityId}-${alias}`} className="inline-pill">
+                        {alias}
+                      </span>
+                    ))}
+                  </div>
+                  <p>{entity.profile}</p>
+                </article>
+              ))}
             </div>
           )}
         </section>
