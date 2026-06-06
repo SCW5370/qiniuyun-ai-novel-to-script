@@ -97,9 +97,9 @@ public class StoryAnalysisService {
         sceneScriptMapper.deleteByProjectId(projectId);
         outlineSceneMapper.deleteByProjectId(projectId);
 
-        AiStoryAssetExtractor.Result result = buildStoryAssets(projectId, chapters);
-        List<StoryEntity> entities = result.entities();
-        List<StoryEvent> events = result.events();
+        AssetBuildResult buildResult = buildStoryAssets(projectId, chapters);
+        List<StoryEntity> entities = buildResult.assets().entities();
+        List<StoryEvent> events = buildResult.assets().events();
 
         if (!entities.isEmpty()) {
             storyEntityMapper.insertBatch(entities);
@@ -109,15 +109,48 @@ public class StoryAnalysisService {
         }
 
         projectService.updateStatus(projectId, ProjectStatus.ENTITY_READY);
-        return new StoryAnalysisResponse(projectId, listEntities(projectId), listEvents(projectId));
+        return new StoryAnalysisResponse(
+                projectId,
+                listEntities(projectId),
+                listEvents(projectId),
+                buildResult.generationMode(),
+                buildResult.aiSuccess(),
+                buildResult.fallbackUsed(),
+                buildResult.message()
+        );
     }
 
-    private AiStoryAssetExtractor.Result buildStoryAssets(String projectId, List<SourceChapter> chapters) {
+    private AssetBuildResult buildStoryAssets(String projectId, List<SourceChapter> chapters) {
         try {
-            return aiStoryAssetExtractor.extract(projectId, chapters);
+            return new AssetBuildResult(
+                    aiStoryAssetExtractor.extract(projectId, chapters),
+                    "AI",
+                    true,
+                    false,
+                    "故事资产由 AI 抽取生成"
+            );
         } catch (Exception ex) {
-            return new AiStoryAssetExtractor.Result(buildEntities(projectId, chapters), buildEvents(projectId, chapters));
+            // AI 服务不可用或返回格式异常时，保留可运行的规则兜底结果，便于前后端继续联调。
+            return new AssetBuildResult(
+                    new AiStoryAssetExtractor.Result(buildEntities(projectId, chapters), buildEvents(projectId, chapters)),
+                    "FALLBACK",
+                    false,
+                    true,
+                    "AI 抽取失败，已使用规则兜底生成故事资产：" + rootCauseMessage(ex)
+            );
         }
+    }
+
+    private String rootCauseMessage(Exception ex) {
+        Throwable current = ex;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        if (message == null || message.isBlank()) {
+            return current.getClass().getSimpleName();
+        }
+        return message.length() > 160 ? message.substring(0, 160) : message;
     }
 
     @Transactional(readOnly = true)
@@ -318,5 +351,14 @@ public class StoryAnalysisService {
         private List<String> sourceRefs() {
             return List.copyOf(sourceRefs);
         }
+    }
+
+    private record AssetBuildResult(
+            AiStoryAssetExtractor.Result assets,
+            String generationMode,
+            Boolean aiSuccess,
+            Boolean fallbackUsed,
+            String message
+    ) {
     }
 }

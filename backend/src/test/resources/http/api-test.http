@@ -1,31 +1,48 @@
-### 创建项目
+### 1. 创建全新测试项目
 POST http://localhost:8080/api/projects
 Content-Type: application/json; charset=utf-8
 
 {
-  "title": "雨夜旧书店"
+  "title": "锈雨与霓虹 AI 联调测试"
 }
 
-### 提交小说文本
-# 将下面的 projectId 替换成创建项目接口返回的 projectId。
-POST http://localhost:8080/api/projects/proj_20260606_000001/source
-Content-Type: application/json; charset=utf-8
+> {%
+    client.global.set("projectId", response.body.data.projectId);
+%}
 
-{
-  "content": "第一章 雨夜\n林舟推门而入，浑身湿透。\n沈老板抬起头，看了他一眼。\n林舟说，他想找一本可能不存在的书。\n\n第二章 旧书店\n旧书店里灯光昏黄，雨声敲在窗上。\n沈老板从抽屉里拿出一张残页。\n林舟决定继续追查手稿的下落。"
-}
+### 2. 提交小说正文
+# 本请求会直接读取 qiniu/小说.txt。
+# 如果移动了 test.http 或 小说.txt，需要同步调整下面的相对路径。
+POST http://localhost:8080/api/projects/{{projectId}}/source
+Content-Type: text/plain; charset=utf-8
 
-### 查询章节
-GET http://localhost:8080/api/projects/proj_20260606_000001/chapters
+< ../../../../../../小说.txt
 
-### 生成章节摘要
-POST http://localhost:8080/api/projects/proj_20260606_000001/chapters/summarize
+### 3. 查询章节，确认小说已经写入数据库
+GET http://localhost:8080/api/projects/{{projectId}}/chapters
 
-### 分析角色、地点、事件
-POST http://localhost:8080/api/projects/proj_20260606_000001/analyze
+### 4. 生成章节摘要
+POST http://localhost:8080/api/projects/{{projectId}}/chapters/summarize
 
-### 查询角色和地点
-GET http://localhost:8080/api/projects/proj_20260606_000001/entities
+### 5. 分析角色、地点、事件
+# 重点查看 data.aiSuccess、data.fallbackUsed、data.generationMode、data.message。
+# aiSuccess=true 表示 AI 抽取成功；fallbackUsed=true 表示 AI 失败后使用了规则兜底。
+POST http://localhost:8080/api/projects/{{projectId}}/analyze
 
-### 查询故事事件
-GET http://localhost:8080/api/projects/proj_20260606_000001/story-events
+### 6. 查询角色和地点
+GET http://localhost:8080/api/projects/{{projectId}}/entities
+
+### 7. 查询故事事件
+GET http://localhost:8080/api/projects/{{projectId}}/story-events
+
+### 8. 生成并查询场景大纲
+GET http://localhost:8080/api/projects/{{projectId}}/outline
+
+### 9. 查询第一个场景剧本
+GET http://localhost:8080/api/projects/{{projectId}}/scenes/S001
+
+### 10. 校验项目
+POST http://localhost:8080/api/projects/{{projectId}}/validate
+
+### 11. 导出 YAML
+GET http://localhost:8080/api/projects/{{projectId}}/export?format=yaml

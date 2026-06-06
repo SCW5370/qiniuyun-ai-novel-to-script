@@ -4,6 +4,7 @@ import com.novel2script.backend.common.ApiResponse;
 import com.novel2script.backend.source.dto.ChapterResponse;
 import com.novel2script.backend.source.dto.SubmitSourceRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,11 +27,22 @@ public class SourceTextController {
         this.chapterSummaryService = chapterSummaryService;
     }
 
-    @PostMapping("/source")
+    @PostMapping(value = "/source", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<List<ChapterResponse>> submitSource(
             @PathVariable String projectId,
             @Valid @RequestBody SubmitSourceRequest request
     ) {
+        return ApiResponse.ok(sourceTextService.submitSource(projectId, request));
+    }
+
+    @PostMapping(value = "/source", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ApiResponse<List<ChapterResponse>> submitSourceText(
+            @PathVariable String projectId,
+            @RequestBody String content
+    ) {
+        // 兼容 IntelliJ HTTP Client 直接读取本地小说.txt 的测试方式，前端仍使用 JSON 接口。
+        SubmitSourceRequest request = new SubmitSourceRequest();
+        request.setContent(content);
         return ApiResponse.ok(sourceTextService.submitSource(projectId, request));
     }
 
