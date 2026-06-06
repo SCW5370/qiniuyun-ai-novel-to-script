@@ -27,12 +27,6 @@ public class StoryAnalysisController {
         return ApiResponse.ok(storyAnalysisService.analyze(projectId));
     }
 
-    @GetMapping("/analyze")
-    public ApiResponse<StoryAnalysisResponse> analyzeForFrontendCompatibility(@PathVariable String projectId) {
-        // 兼容当前前端按钮的 GET 请求；正式接口契约仍以 POST /analyze 为准。
-        return ApiResponse.ok(storyAnalysisService.analyze(projectId));
-    }
-
     @GetMapping("/entities")
     public ApiResponse<List<StoryEntityResponse>> listEntities(@PathVariable String projectId) {
         return ApiResponse.ok(storyAnalysisService.listEntities(projectId));
