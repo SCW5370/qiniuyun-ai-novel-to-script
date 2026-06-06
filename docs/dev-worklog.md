@@ -5,6 +5,7 @@
 - 共享契约以 `docs/api-contract.md` 为准
 - SSE 事件以 `docs/sse-events.md` 为准
 - `projectId` 使用 `proj_YYYYMMDD_xxx` 格式
+- 数据库、后端接口和前端路由统一只使用字符串 `projectId`，不再使用数字项目 ID
 - `sceneId` 使用 `S001` 递增格式
 - 空数组统一返回 `[]`
 

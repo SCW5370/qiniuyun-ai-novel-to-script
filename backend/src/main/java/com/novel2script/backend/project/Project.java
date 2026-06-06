@@ -7,9 +7,7 @@ import java.time.LocalDateTime;
  */
 public class Project {
 
-    private Long id;
-
-    private String projectUid;
+    private String projectId;
 
     private String title;
 
@@ -22,25 +20,18 @@ public class Project {
     public Project() {
     }
 
-    public Project(String title) {
+    public Project(String projectId, String title) {
+        this.projectId = projectId;
         this.title = title;
         this.status = ProjectStatus.CREATED;
     }
 
-    public Long getId() {
-        return id;
+    public String getProjectId() {
+        return projectId;
     }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getProjectUid() {
-        return projectUid;
-    }
-
-    public void setProjectUid(String projectUid) {
-        this.projectUid = projectUid;
+    public void setProjectId(String projectId) {
+        this.projectId = projectId;
     }
 
     public String getTitle() {

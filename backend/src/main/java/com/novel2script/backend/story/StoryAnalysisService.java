@@ -71,7 +71,7 @@ public class StoryAnalysisService {
     }
 
     @Transactional
-    public StoryAnalysisResponse analyze(Long projectId) {
+    public StoryAnalysisResponse analyze(String projectId) {
         projectService.getProjectEntity(projectId);
         List<SourceChapter> chapters = sourceChapterMapper.findByProjectIdOrderByChapterNoAsc(projectId);
         if (chapters.isEmpty()) {
@@ -96,7 +96,7 @@ public class StoryAnalysisService {
     }
 
     @Transactional(readOnly = true)
-    public List<StoryEntityResponse> listEntities(Long projectId) {
+    public List<StoryEntityResponse> listEntities(String projectId) {
         projectService.getProjectEntity(projectId);
         return storyEntityMapper.findByProjectId(projectId).stream()
                 .map(entity -> StoryEntityResponse.from(
@@ -108,21 +108,21 @@ public class StoryAnalysisService {
     }
 
     @Transactional(readOnly = true)
-    public List<StoryEventResponse> listEvents(Long projectId) {
+    public List<StoryEventResponse> listEvents(String projectId) {
         projectService.getProjectEntity(projectId);
         return storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId).stream()
                 .map(event -> StoryEventResponse.from(event, readStringList(event.getSourceRefsJson())))
                 .toList();
     }
 
-    private List<StoryEntity> buildEntities(Long projectId, List<SourceChapter> chapters) {
+    private List<StoryEntity> buildEntities(String projectId, List<SourceChapter> chapters) {
         List<StoryEntity> entities = new ArrayList<>();
         entities.addAll(buildCharacterEntities(projectId, chapters));
         entities.addAll(buildLocationEntities(projectId, chapters));
         return entities;
     }
 
-    private List<StoryEntity> buildCharacterEntities(Long projectId, List<SourceChapter> chapters) {
+    private List<StoryEntity> buildCharacterEntities(String projectId, List<SourceChapter> chapters) {
         Map<String, Candidate> candidates = new LinkedHashMap<>();
         for (SourceChapter chapter : chapters) {
             Matcher matcher = CHARACTER_PATTERN.matcher(chapter.getCleanText());
@@ -164,7 +164,7 @@ public class StoryAnalysisService {
         return entities;
     }
 
-    private List<StoryEntity> buildLocationEntities(Long projectId, List<SourceChapter> chapters) {
+    private List<StoryEntity> buildLocationEntities(String projectId, List<SourceChapter> chapters) {
         Map<String, Candidate> candidates = new LinkedHashMap<>();
         for (SourceChapter chapter : chapters) {
             Matcher matcher = LOCATION_PATTERN.matcher(chapter.getCleanText());
@@ -204,7 +204,7 @@ public class StoryAnalysisService {
         return entities;
     }
 
-    private List<StoryEvent> buildEvents(Long projectId, List<SourceChapter> chapters) {
+    private List<StoryEvent> buildEvents(String projectId, List<SourceChapter> chapters) {
         List<StoryEvent> events = new ArrayList<>();
         for (int i = 0; i < chapters.size(); i++) {
             SourceChapter chapter = chapters.get(i);

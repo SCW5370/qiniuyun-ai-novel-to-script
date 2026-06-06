@@ -7,8 +7,8 @@ Content-Type: application/json; charset=utf-8
 }
 
 ### 提交小说文本
-# 将 2 替换成创建项目返回的 id，或替换成 projectId，例如 proj_20260606_002。
-POST http://localhost:8080/api/projects/2/source
+# 将下面的 projectId 替换成创建项目接口返回的 projectId。
+POST http://localhost:8080/api/projects/proj_20260606_000001/source
 Content-Type: application/json; charset=utf-8
 
 {
@@ -16,13 +16,13 @@ Content-Type: application/json; charset=utf-8
 }
 
 ### 查询章节
-GET http://localhost:8080/api/projects/2/chapters
+GET http://localhost:8080/api/projects/proj_20260606_000001/chapters
 
 ### 分析角色、地点、事件
-POST http://localhost:8080/api/projects/2/analyze
+POST http://localhost:8080/api/projects/proj_20260606_000001/analyze
 
 ### 查询角色和地点
-GET http://localhost:8080/api/projects/2/entities
+GET http://localhost:8080/api/projects/proj_20260606_000001/entities
 
 ### 查询故事事件
-GET http://localhost:8080/api/projects/2/story-events
+GET http://localhost:8080/api/projects/proj_20260606_000001/story-events

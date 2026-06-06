@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class ProjectService {
@@ -21,46 +22,36 @@ public class ProjectService {
 
     @Transactional
     public ProjectResponse createProject(CreateProjectRequest request) {
-        Project project = new Project(request.getTitle().trim());
+        Project project = new Project(buildProjectId(), request.getTitle().trim());
         projectMapper.insert(project);
-        String projectUid = buildProjectUid(project.getId());
-        projectMapper.updateProjectUid(project.getId(), projectUid);
-        return ProjectResponse.from(getProjectEntity(project.getId()));
+        return ProjectResponse.from(getProjectEntity(project.getProjectId()));
     }
 
     @Transactional(readOnly = true)
-    public Project getProjectEntity(Long projectId) {
-        return projectMapper.findById(projectId)
+    public Project getProjectEntity(String projectId) {
+        if (projectId == null || projectId.isBlank()) {
+            throw new IllegalArgumentException("项目 ID 不能为空");
+        }
+        return projectMapper.findByProjectId(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("项目不存在: " + projectId));
     }
 
     @Transactional(readOnly = true)
-    public Project getProjectEntity(String projectKey) {
-        if (projectKey == null || projectKey.isBlank()) {
-            throw new IllegalArgumentException("项目 ID 不能为空");
-        }
-        if (projectKey.chars().allMatch(Character::isDigit)) {
-            return getProjectEntity(Long.valueOf(projectKey));
-        }
-        return projectMapper.findByProjectUid(projectKey)
-                .orElseThrow(() -> new IllegalArgumentException("项目不存在: " + projectKey));
-    }
-
-    @Transactional(readOnly = true)
-    public ProjectResponse getProject(String projectKey) {
-        return ProjectResponse.from(getProjectEntity(projectKey));
+    public ProjectResponse getProject(String projectId) {
+        return ProjectResponse.from(getProjectEntity(projectId));
     }
 
     @Transactional
-    public void updateStatus(Long projectId, ProjectStatus status) {
+    public void updateStatus(String projectId, ProjectStatus status) {
         int affectedRows = projectMapper.updateStatus(projectId, status);
         if (affectedRows == 0) {
             throw new IllegalArgumentException("项目不存在: " + projectId);
         }
     }
 
-    private String buildProjectUid(Long id) {
+    private String buildProjectId() {
         String date = LocalDate.now().format(PROJECT_UID_DATE_FORMAT);
-        return "proj_" + date + "_" + String.format("%03d", id);
+        int suffix = ThreadLocalRandom.current().nextInt(1, 1_000_000);
+        return "proj_" + date + "_" + String.format("%06d", suffix);
     }
 }

@@ -25,14 +25,14 @@ public class SourceTextController {
 
     @PostMapping("/source")
     public ApiResponse<List<ChapterResponse>> submitSource(
-            @PathVariable Long projectId,
+            @PathVariable String projectId,
             @Valid @RequestBody SubmitSourceRequest request
     ) {
         return ApiResponse.ok(sourceTextService.submitSource(projectId, request));
     }
 
     @GetMapping("/chapters")
-    public ApiResponse<List<ChapterResponse>> listChapters(@PathVariable Long projectId) {
+    public ApiResponse<List<ChapterResponse>> listChapters(@PathVariable String projectId) {
         return ApiResponse.ok(sourceTextService.listChapters(projectId));
     }
 }

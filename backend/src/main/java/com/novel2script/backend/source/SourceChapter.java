@@ -13,7 +13,7 @@ public class SourceChapter {
 
     private Project project;
 
-    private Long projectId;
+    private String projectId;
 
     private Integer chapterNo;
 
@@ -32,7 +32,7 @@ public class SourceChapter {
 
     public SourceChapter(Project project, Integer chapterNo, String title, String rawText, String cleanText) {
         this.project = project;
-        this.projectId = project.getId();
+        this.projectId = project.getProjectId();
         this.chapterNo = chapterNo;
         this.title = title;
         this.rawText = rawText;
@@ -55,11 +55,11 @@ public class SourceChapter {
         this.project = project;
     }
 
-    public Long getProjectId() {
+    public String getProjectId() {
         return projectId;
     }
 
-    public void setProjectId(Long projectId) {
+    public void setProjectId(String projectId) {
         this.projectId = projectId;
     }
 

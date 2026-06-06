@@ -13,7 +13,7 @@ public interface StoryEntityMapper {
 
     int insertBatch(@Param("entities") List<StoryEntity> entities);
 
-    List<StoryEntity> findByProjectId(@Param("projectId") Long projectId);
+    List<StoryEntity> findByProjectId(@Param("projectId") String projectId);
 
-    int deleteByProjectId(@Param("projectId") Long projectId);
+    int deleteByProjectId(@Param("projectId") String projectId);
 }

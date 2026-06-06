@@ -5,42 +5,28 @@
 <mapper namespace="com.novel2script.backend.project.ProjectMapper">
 
     <resultMap id="ProjectResultMap" type="com.novel2script.backend.project.Project">
-        <id property="id" column="id"/>
-        <result property="projectUid" column="project_uid"/>
+        <id property="projectId" column="project_id"/>
         <result property="title" column="title"/>
         <result property="status" column="status"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
-    <insert id="insert" parameterType="com.novel2script.backend.project.Project" useGeneratedKeys="true" keyProperty="id">
-        insert into projects (project_uid, title, status)
-        values (#{projectUid}, #{title}, #{status})
+    <insert id="insert" parameterType="com.novel2script.backend.project.Project">
+        insert into projects (project_id, title, status)
+        values (#{projectId}, #{title}, #{status})
     </insert>
 
-    <select id="findById" resultMap="ProjectResultMap">
-        select id, project_uid, title, status, created_at, updated_at
+    <select id="findByProjectId" resultMap="ProjectResultMap">
+        select project_id, title, status, created_at, updated_at
         from projects
-        where id = #{id}
+        where project_id = #{projectId}
     </select>
-
-    <select id="findByProjectUid" resultMap="ProjectResultMap">
-        select id, project_uid, title, status, created_at, updated_at
-        from projects
-        where project_uid = #{projectUid}
-    </select>
-
-    <update id="updateProjectUid">
-        update projects
-        set project_uid = #{projectUid},
-            updated_at = current_timestamp
-        where id = #{id}
-    </update>
 
     <update id="updateStatus">
         update projects
         set status = #{status},
             updated_at = current_timestamp
-        where id = #{id}
+        where project_id = #{projectId}
     </update>
 </mapper>

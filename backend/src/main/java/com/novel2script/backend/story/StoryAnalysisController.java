@@ -23,17 +23,17 @@ public class StoryAnalysisController {
     }
 
     @PostMapping("/analyze")
-    public ApiResponse<StoryAnalysisResponse> analyze(@PathVariable Long projectId) {
+    public ApiResponse<StoryAnalysisResponse> analyze(@PathVariable String projectId) {
         return ApiResponse.ok(storyAnalysisService.analyze(projectId));
     }
 
     @GetMapping("/entities")
-    public ApiResponse<List<StoryEntityResponse>> listEntities(@PathVariable Long projectId) {
+    public ApiResponse<List<StoryEntityResponse>> listEntities(@PathVariable String projectId) {
         return ApiResponse.ok(storyAnalysisService.listEntities(projectId));
     }
 
     @GetMapping("/story-events")
-    public ApiResponse<List<StoryEventResponse>> listEvents(@PathVariable Long projectId) {
+    public ApiResponse<List<StoryEventResponse>> listEvents(@PathVariable String projectId) {
         return ApiResponse.ok(storyAnalysisService.listEvents(projectId));
     }
 }

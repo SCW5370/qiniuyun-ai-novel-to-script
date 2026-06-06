@@ -9,7 +9,7 @@ public class StoryEvent {
 
     private Long id;
 
-    private Long projectId;
+    private String projectId;
 
     private String eventId;
 
@@ -30,7 +30,7 @@ public class StoryEvent {
     public StoryEvent() {
     }
 
-    public StoryEvent(Long projectId, String eventId, Long chapterId, Integer eventOrder, String title, String summary, String sourceRefsJson) {
+    public StoryEvent(String projectId, String eventId, Long chapterId, Integer eventOrder, String title, String summary, String sourceRefsJson) {
         this.projectId = projectId;
         this.eventId = eventId;
         this.chapterId = chapterId;
@@ -48,11 +48,11 @@ public class StoryEvent {
         this.id = id;
     }
 
-    public Long getProjectId() {
+    public String getProjectId() {
         return projectId;
     }
 
-    public void setProjectId(Long projectId) {
+    public void setProjectId(String projectId) {
         this.projectId = projectId;
     }
 

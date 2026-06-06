@@ -30,7 +30,7 @@ public class SourceTextService {
     }
 
     @Transactional
-    public List<ChapterResponse> submitSource(Long projectId, SubmitSourceRequest request) {
+    public List<ChapterResponse> submitSource(String projectId, SubmitSourceRequest request) {
         Project project = projectService.getProjectEntity(projectId);
         projectService.updateStatus(projectId, ProjectStatus.SOURCE_SUBMITTED);
 
@@ -58,7 +58,7 @@ public class SourceTextService {
     }
 
     @Transactional(readOnly = true)
-    public List<ChapterResponse> listChapters(Long projectId) {
+    public List<ChapterResponse> listChapters(String projectId) {
         projectService.getProjectEntity(projectId);
         return sourceChapterMapper.findByProjectIdOrderByChapterNoAsc(projectId).stream()
                 .map(ChapterResponse::from)

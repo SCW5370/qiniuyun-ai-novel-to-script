@@ -34,7 +34,7 @@
 ```json
 {
   "success": false,
-  "message": "项目不存在: 999",
+  "message": "项目不存在: proj_20260606_000001",
   "data": null
 }
 ```
@@ -79,8 +79,7 @@ POST /api/projects
   "success": true,
   "message": "ok",
   "data": {
-    "id": 1,
-    "projectId": "proj_20260606_001",
+    "projectId": "proj_20260606_000001",
     "title": "雨夜旧书店",
     "status": "CREATED",
     "createdAt": "2026-06-06T00:00:00",
@@ -99,12 +98,7 @@ GET /api/projects/{projectId}
 
 | 参数 | 类型 | 说明 |
 | --- | --- | --- |
-| `projectId` | number | 项目 ID |
-
-说明：
-
-- 当前路径参数兼容数字数据库 ID 和字符串项目 ID，例如 `1` 或 `proj_20260606_001`。
-- 对外展示和前端路由优先使用字符串 `projectId`。
+| `projectId` | string | 项目 ID，格式 `proj_YYYYMMDD_xxxxxx` |
 
 成功响应：
 
@@ -113,8 +107,7 @@ GET /api/projects/{projectId}
   "success": true,
   "message": "ok",
   "data": {
-    "id": 1,
-    "projectId": "proj_20260606_001",
+    "projectId": "proj_20260606_000001",
     "title": "雨夜旧书店",
     "status": "CHAPTERED",
     "createdAt": "2026-06-06T00:00:00",
@@ -133,7 +126,7 @@ POST /api/projects/{projectId}/source
 
 | 参数 | 类型 | 说明 |
 | --- | --- | --- |
-| `projectId` | number | 项目 ID |
+| `projectId` | string | 项目 ID，格式 `proj_YYYYMMDD_xxxxxx` |
 
 请求体：
 
@@ -193,7 +186,7 @@ GET /api/projects/{projectId}/chapters
 
 | 参数 | 类型 | 说明 |
 | --- | --- | --- |
-| `projectId` | number | 项目 ID |
+| `projectId` | string | 项目 ID，格式 `proj_YYYYMMDD_xxxxxx` |
 
 成功响应：
 
@@ -224,7 +217,7 @@ POST /api/projects/{projectId}/analyze
 
 | 参数 | 类型 | 说明 |
 | --- | --- | --- |
-| `projectId` | number | 项目 ID |
+| `projectId` | string | 项目 ID，格式 `proj_YYYYMMDD_xxxxxx` |
 
 处理规则：
 
@@ -240,7 +233,7 @@ POST /api/projects/{projectId}/analyze
   "success": true,
   "message": "ok",
   "data": {
-    "projectId": 1,
+    "projectId": "proj_20260606_000001",
     "status": "ENTITY_READY",
     "entityCount": 1,
     "eventCount": 1,
@@ -343,7 +336,7 @@ curl -X POST http://localhost:8080/api/projects ^
 提交小说文本：
 
 ```bash
-curl -X POST http://localhost:8080/api/projects/1/source ^
+curl -X POST http://localhost:8080/api/projects/proj_20260606_000001/source ^
   -H "Content-Type: application/json" ^
   -d "{\"content\":\"第一章 雨夜\n林舟推门而入。\n\n第二章 旧书店\n老板抬起头。\"}"
 ```
@@ -351,23 +344,23 @@ curl -X POST http://localhost:8080/api/projects/1/source ^
 查询章节：
 
 ```bash
-curl http://localhost:8080/api/projects/1/chapters
+curl http://localhost:8080/api/projects/proj_20260606_000001/chapters
 ```
 
 分析故事中间资产：
 
 ```bash
-curl -X POST http://localhost:8080/api/projects/1/analyze
+curl -X POST http://localhost:8080/api/projects/proj_20260606_000001/analyze
 ```
 
 查询故事实体：
 
 ```bash
-curl http://localhost:8080/api/projects/1/entities
+curl http://localhost:8080/api/projects/proj_20260606_000001/entities
 ```
 
 查询故事事件：
 
 ```bash
-curl http://localhost:8080/api/projects/1/story-events
+curl http://localhost:8080/api/projects/proj_20260606_000001/story-events
 ```

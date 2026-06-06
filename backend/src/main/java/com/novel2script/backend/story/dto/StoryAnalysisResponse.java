@@ -4,7 +4,7 @@ import java.util.List;
 
 public class StoryAnalysisResponse {
 
-    private Long projectId;
+    private String projectId;
 
     private String status;
 
@@ -16,7 +16,7 @@ public class StoryAnalysisResponse {
 
     private List<StoryEventResponse> events;
 
-    public StoryAnalysisResponse(Long projectId, List<StoryEntityResponse> entities, List<StoryEventResponse> events) {
+    public StoryAnalysisResponse(String projectId, List<StoryEntityResponse> entities, List<StoryEventResponse> events) {
         this.projectId = projectId;
         this.status = "ENTITY_READY";
         this.entityCount = entities.size();
@@ -25,7 +25,7 @@ public class StoryAnalysisResponse {
         this.events = events;
     }
 
-    public Long getProjectId() {
+    public String getProjectId() {
         return projectId;
     }
 

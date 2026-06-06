@@ -13,7 +13,7 @@ public interface SourceChapterMapper {
 
     int insertBatch(@Param("chapters") List<SourceChapter> chapters);
 
-    List<SourceChapter> findByProjectIdOrderByChapterNoAsc(@Param("projectId") Long projectId);
+    List<SourceChapter> findByProjectIdOrderByChapterNoAsc(@Param("projectId") String projectId);
 
-    int deleteByProjectId(@Param("projectId") Long projectId);
+    int deleteByProjectId(@Param("projectId") String projectId);
 }

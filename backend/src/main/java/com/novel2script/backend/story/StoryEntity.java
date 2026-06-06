@@ -9,7 +9,7 @@ public class StoryEntity {
 
     private Long id;
 
-    private Long projectId;
+    private String projectId;
 
     private String entityId;
 
@@ -30,7 +30,7 @@ public class StoryEntity {
     public StoryEntity() {
     }
 
-    public StoryEntity(Long projectId, String entityId, StoryEntityType entityType, String canonicalName, String aliasesJson, String profile, String sourceRefsJson) {
+    public StoryEntity(String projectId, String entityId, StoryEntityType entityType, String canonicalName, String aliasesJson, String profile, String sourceRefsJson) {
         this.projectId = projectId;
         this.entityId = entityId;
         this.entityType = entityType;
@@ -48,11 +48,11 @@ public class StoryEntity {
         this.id = id;
     }
 
-    public Long getProjectId() {
+    public String getProjectId() {
         return projectId;
     }
 
-    public void setProjectId(Long projectId) {
+    public void setProjectId(String projectId) {
         this.projectId = projectId;
     }
 
