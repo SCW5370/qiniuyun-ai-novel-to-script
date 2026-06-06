@@ -202,10 +202,11 @@ Rules:
 
 ## Current Integration Status
 
-- 已在 `main` 真实接入：`GET /api/projects/{projectId}`、`GET /api/projects/{projectId}/chapters`
-- A 线进行中：`POST /api/projects/{projectId}/analyze`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`
+- 已在 `main` 真实接入：`POST /api/projects`、`GET /api/projects`、`GET /api/projects/{projectId}`、`POST /api/projects/{projectId}/source`、`GET /api/projects/{projectId}/chapters`、`POST /api/projects/{projectId}/analyze`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`
+- 已在 `main` 部分接入：前端已接入项目创建、项目列表、正文提交、章节列表、故事资产分析、角色地点面板、故事事件面板
+- A 线进行中：`POST /api/projects/{projectId}/chapters/summarize`、`GET /api/projects/{projectId}/outline`、`GET /api/projects/{projectId}/scenes`、`GET /api/projects/{projectId}/scenes/{sceneId}`、`POST /api/projects/{projectId}/validate`、`GET /api/projects/{projectId}/export?format=yaml`、`GET /api/projects/{projectId}/events`
 - 当前仍使用 mock 的区域：`outline`、`scene detail`、`validation`、`yaml export preview`、`events`
-- 第一阶段策略：真实接项目和章节，场景与导出继续使用 mock，避免阻塞 A/B 并行开发
+- 当前阶段策略：真实接项目管理与故事中间资产，场景与导出继续使用 mock，避免阻塞 A/B 并行开发
 
 ## Compatibility Rules
 

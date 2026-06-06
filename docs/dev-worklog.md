@@ -12,26 +12,33 @@
 ## A Line Status
 
 - 已完成项目创建接口
+- 已完成项目列表查询接口
 - 已完成原文提交和章节切分接口
 - 已完成章节摘要字段与摘要生成接口
 - 已完成基础后端工程骨架
 - 已完成规则版角色/地点/事件中间资产接口
-- 当前真实可用接口：`GET /api/projects/{projectId}`、`GET /api/projects/{projectId}/chapters`
-- 当前 A 线新增接口：`POST /api/projects/{projectId}/analyze`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`
+- 已完成本地前后端跨域配置
+- 当前真实可用接口：`POST /api/projects`、`GET /api/projects`、`GET /api/projects/{projectId}`、`POST /api/projects/{projectId}/source`、`GET /api/projects/{projectId}/chapters`
+- 当前 A 线新增接口：`POST /api/projects/{projectId}/chapters/summarize`、`POST /api/projects/{projectId}/analyze`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`
 
 ## B Line Status
 
 - 已完成前端工作台骨架
 - 已完成 mock 场景工作台
 - 已完成真实项目引导流
+- 已完成真实项目创建和项目列表接入
+- 已完成真实小说正文提交流程
 - 已完成真实章节面板接入
-- 当前工作台状态：`真实项目/章节 + mock 场景/校验/YAML`
+- 已完成真实故事资产分析触发
+- 已完成真实角色/地点面板接入
+- 已完成真实故事事件面板接入
+- 当前工作台状态：`真实项目管理/正文提交/章节/实体/事件 + mock 场景/校验/YAML`
 
 ## Next A Line Dependencies
 
 - 将本地规则版章节摘要替换为 LLM 摘要
 - 将规则抽取替换为 LLM 角色归一、地点表抽取
-- 为 B 线场景大纲生成提供稳定的 `entities` 和 `story-events`
+- 为 B 线场景大纲生成提供稳定的 `outline`、`scenes`、`validate`、`export`
 - `GET /api/projects/{projectId}/events` 保留给 SSE，不用于故事事件列表
 
 ## Next B Line Tasks
