@@ -690,6 +690,14 @@ textarea {
   font-size: 12px;
 }
 
+.mobile-scene-meta {
+  min-width: 0;
+  color: var(--studio-muted);
+  font-size: 11px;
+  font-style: normal;
+  overflow-wrap: anywhere;
+}
+
 .source-action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -748,6 +756,51 @@ textarea {
     linear-gradient(145deg, rgba(2, 5, 9, 0.98), rgba(12, 17, 24, 0.92));
 }
 
+.production-map-legend {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  pointer-events: none;
+}
+
+.production-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(2, 6, 10, 0.74);
+  color: #d8f9ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.production-map-legend span::before {
+  content: "";
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: #2de8ff;
+  box-shadow: 0 0 10px rgba(45, 232, 255, 0.55);
+}
+
+.production-map-legend .legend-source::before {
+  background: #f7b84e;
+  box-shadow: 0 0 10px rgba(247, 184, 78, 0.5);
+}
+
+.production-map-legend .legend-character::before {
+  background: linear-gradient(90deg, #49e8c9, #75a7ff);
+  box-shadow: 0 0 10px rgba(73, 232, 201, 0.42);
+}
+
 .map-node-label {
   display: inline-flex;
   align-items: center;
@@ -765,14 +818,40 @@ textarea {
   cursor: pointer;
 }
 
+.map-node-label-chapter {
+  color: #d9e8f5;
+}
+
+.map-node-label-event {
+  border-color: rgba(247, 184, 78, 0.2);
+  color: #ffe0a8;
+}
+
+.map-node-label-entity {
+  border-color: rgba(73, 232, 201, 0.2);
+  color: #c8fff5;
+}
+
+.map-node-label-location {
+  border-color: rgba(117, 167, 255, 0.24);
+  color: #d5e4ff;
+}
+
 .map-node-label:disabled {
   cursor: default;
+}
+
+.map-node-label-context {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
 }
 
 .map-node-label-active {
   border-color: rgba(37, 228, 244, 0.75);
   background: rgba(37, 228, 244, 0.2);
   color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(37, 228, 244, 0.16);
 }
 
 .production-map-mobile {
