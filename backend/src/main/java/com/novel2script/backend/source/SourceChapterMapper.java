@@ -17,6 +17,8 @@ public interface SourceChapterMapper {
 
     List<SourceChapter> findByProjectIdOrderByChapterNoAsc(@Param("projectId") String projectId);
 
+    int updateChapterNo(@Param("id") Long id, @Param("chapterNo") Integer chapterNo);
+
     int updateSummary(@Param("id") Long id, @Param("summary") String summary);
 
     int deleteByProjectId(@Param("projectId") String projectId);
