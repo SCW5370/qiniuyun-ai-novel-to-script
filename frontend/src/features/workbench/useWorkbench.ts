@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   analyzeStoryAssets,
   analyzeStoryAssetsIncremental,
@@ -8,6 +8,7 @@ import {
   exportProjectYaml,
   generateProjectOutline,
   generateProjectOutlineIncremental,
+  generateProjectSceneScripts,
   getProject,
   getProjectChapters,
   getProjectOutline,
@@ -15,6 +16,7 @@ import {
   getStoryEntities,
   getStoryEvents,
   listProjects,
+  listProjectScenes,
   regenerateProjectScene,
   summarizeProjectChapters,
   submitProjectSource,
@@ -159,6 +161,8 @@ export function useWorkbench() {
   const [sceneStreamMessage, setSceneStreamMessage] = useState("");
   const [isValidatingProject, setIsValidatingProject] = useState(false);
   const [isExportingYaml, setIsExportingYaml] = useState(false);
+  const scenePreviewCacheRef = useRef<Record<string, string>>({});
+  const sceneScriptJobRequestedRef = useRef<Set<string>>(new Set());
 
   const canLoadGeneratedScenes =
     project.status === "ENTITY_READY" ||
@@ -226,6 +230,9 @@ export function useWorkbench() {
       setProgressStreamPhase("scene_generating");
     } else if (event === "job.completed") {
       setProgressStreamPhase("completed");
+      sceneScriptJobRequestedRef.current.delete(data.projectId);
+    } else if (event === "job.failed") {
+      sceneScriptJobRequestedRef.current.delete(data.projectId);
     }
 
     if (event === "job.started" || event === "phase.changed") {
@@ -372,6 +379,35 @@ export function useWorkbench() {
       const job = await generateProjectOutline(targetProjectId);
       markWorkflowSubmitted(job, "outline");
       setOutlineMessage(`场景大纲任务已提交到 MQ：${job.jobId}`);
+    } else if (scenes.length > 0) {
+      const existingScripts = await getProjectSceneScriptsSafe(targetProjectId);
+      if (existingScripts.length < scenes.length) {
+        const job = await generateProjectSceneScripts(targetProjectId);
+        setSceneDetailMessage(`Scene 剧本生成任务已提交到 MQ：${job.jobId}`);
+      }
+    }
+  }
+
+  async function getProjectSceneScriptsSafe(targetProjectId: string) {
+    try {
+      return await listProjectScenes(targetProjectId);
+    } catch {
+      return [];
+    }
+  }
+
+  async function submitSceneScriptsJobOnce(targetProjectId: string) {
+    if (sceneScriptJobRequestedRef.current.has(targetProjectId)) return;
+
+    sceneScriptJobRequestedRef.current.add(targetProjectId);
+    try {
+      const job = await generateProjectSceneScripts(targetProjectId);
+      setSceneDetailMessage((current) =>
+        current ? `${current} 后台补齐任务已提交：${job.jobId}` : `Scene 剧本生成任务已提交到 MQ：${job.jobId}`
+      );
+    } catch (error) {
+      sceneScriptJobRequestedRef.current.delete(targetProjectId);
+      setSceneDetailMessage(error instanceof Error ? error.message : "无法提交 Scene 剧本补齐任务");
     }
   }
 
@@ -626,11 +662,19 @@ export function useWorkbench() {
     }
   }
 
-  function handleStreamScenePreview() {
+  function startScenePreview(sceneId: string) {
+    const cacheKey = `${project.projectId}:${sceneId}`;
+    const cachedPreview = scenePreviewCacheRef.current[cacheKey];
+    if (cachedPreview) {
+      setSceneStreamContent(cachedPreview);
+      setSceneStreamMessage("已显示上次 AI 流式预览，后台仍会以结构化 Scene 剧本为准。");
+      return;
+    }
+
     if (
       connectionMode !== "connected" ||
       outlineSourceMode !== "real" ||
-      !selectedSceneId ||
+      !sceneId ||
       isProjectOperationBusy ||
       isStreamingScene
     ) {
@@ -640,10 +684,11 @@ export function useWorkbench() {
     setIsStreamingScene(true);
     setSceneStreamContent("");
     setSceneStreamMessage("正在连接 AI 流式预览...");
+    scenePreviewCacheRef.current[cacheKey] = "";
 
     const streamUrl = `${appConfig.apiBaseUrl}/projects/${encodeURIComponent(
       project.projectId
-    )}/scenes/${encodeURIComponent(selectedSceneId)}/stream`;
+    )}/scenes/${encodeURIComponent(sceneId)}/stream`;
     const eventSource = new EventSource(streamUrl);
     let closed = false;
 
@@ -671,7 +716,13 @@ export function useWorkbench() {
 
     eventSource.addEventListener("chunk", (event) => {
       const payload = readPayload(event as MessageEvent<string>);
-      if (payload?.content) setSceneStreamContent((current) => current + payload.content);
+      if (payload?.content) {
+        setSceneStreamContent((current) => {
+          const nextContent = current + payload.content;
+          scenePreviewCacheRef.current[cacheKey] = nextContent;
+          return nextContent;
+        });
+      }
     });
 
     eventSource.addEventListener("done", (event) => {
@@ -685,6 +736,11 @@ export function useWorkbench() {
     });
 
     eventSource.onerror = () => closeStream("AI 流式预览连接已断开。");
+  }
+
+  function handleStreamScenePreview() {
+    if (!selectedSceneId) return;
+    startScenePreview(selectedSceneId);
   }
 
   async function handleValidateProject() {
@@ -944,6 +1000,18 @@ export function useWorkbench() {
         }
       } catch (error) {
         if (cancelled) return;
+        if (outlineSourceMode === "real") {
+          setSceneDetail(null);
+          setSceneDetailSourceMode("empty");
+          setSceneDetailMessage(
+            error instanceof Error
+              ? `${error.message}，正在提交后台补齐任务并打开 AI 流式预览。`
+              : "Scene 尚未生成，正在提交后台补齐任务并打开 AI 流式预览。"
+          );
+          void submitSceneScriptsJobOnce(project.projectId);
+          startScenePreview(selectedSceneId);
+          return;
+        }
         if (mockScene) {
           setSceneDetail(mockScene);
           setSceneDetailSourceMode("mock");
@@ -960,7 +1028,7 @@ export function useWorkbench() {
     return () => {
       cancelled = true;
     };
-  }, [connectionMode, project.projectId, selectedSceneId, canLoadGeneratedScenes]);
+  }, [connectionMode, project.projectId, selectedSceneId, canLoadGeneratedScenes, outlineSourceMode]);
 
   useEffect(() => {
     if (yamlSourceMode !== "real") {

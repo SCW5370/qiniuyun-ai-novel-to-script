@@ -349,11 +349,26 @@ export async function generateProjectOutline(projectId: string) {
   return data as WorkflowJobViewModel;
 }
 
+export async function generateProjectSceneScripts(projectId: string) {
+  const data = await requestJson<BackendWorkflowJobResponse>(
+    `/projects/${projectId}/jobs/scenes`,
+    buildJsonPostOptions()
+  );
+  return data as WorkflowJobViewModel;
+}
+
 export async function getProjectScene(projectId: string, sceneId: string) {
   const data = await requestJson<BackendSceneDetailResponse>(
     `/projects/${projectId}/scenes/${sceneId}`
   );
   return adaptSceneDetail(data);
+}
+
+export async function listProjectScenes(projectId: string) {
+  const data = await requestJson<BackendSceneDetailResponse[]>(
+    `/projects/${projectId}/scenes`
+  );
+  return data.map(adaptSceneDetail);
 }
 
 export async function regenerateProjectScene(projectId: string, sceneId: string) {

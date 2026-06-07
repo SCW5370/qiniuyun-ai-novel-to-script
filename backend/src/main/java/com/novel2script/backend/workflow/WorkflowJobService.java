@@ -71,6 +71,10 @@ public class WorkflowJobService {
         return submit(projectId, "outline_generation_incremental_async", "增量场景大纲生成任务已提交到 MQ");
     }
 
+    public WorkflowJobResponse submitSceneScriptsGeneration(String projectId) {
+        return submit(projectId, "scene_scripts_generation_async", "Scene 剧本生成任务已提交到 MQ");
+    }
+
     public WorkflowJobResponse getJob(String projectId, String jobId) {
         JobState job = jobs.get(jobId);
         if (job == null || !projectId.equals(job.projectId())) {
@@ -153,6 +157,7 @@ public class WorkflowJobService {
             case "story_analysis_incremental_async" -> storyAnalysisService.analyzeIncremental(job.projectId());
             case "outline_generation_async" -> sceneGenerationService.listOutline(job.projectId());
             case "outline_generation_incremental_async" -> sceneGenerationService.generateIncrementalOutline(job.projectId());
+            case "scene_scripts_generation_async" -> sceneGenerationService.generateMissingSceneScripts(job.projectId());
             default -> throw new IllegalArgumentException("不支持的任务类型: " + job.jobType());
         }
     }

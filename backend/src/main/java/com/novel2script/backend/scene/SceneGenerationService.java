@@ -172,11 +172,45 @@ public class SceneGenerationService {
         return projectOperationLock.execute(projectId, () -> getSceneScriptLocked(projectId, sceneId));
     }
 
+    @Transactional
+    public List<SceneScriptResponse> generateMissingSceneScripts(String projectId) {
+        return projectOperationLock.execute(projectId, () -> generateMissingSceneScriptsLocked(projectId));
+    }
+
     private SceneScriptResponse getSceneScriptLocked(String projectId, String sceneId) {
         projectService.getProjectEntity(projectId);
         return sceneScriptMapper.findByProjectIdAndSceneId(projectId, sceneId)
                 .map(this::toSceneScriptResponse)
-                .orElseGet(() -> toSceneScriptResponse(generateSceneScript(projectId, sceneId, false)));
+                .orElseThrow(() -> new IllegalArgumentException("Scene 尚未生成: " + sceneId));
+    }
+
+    private List<SceneScriptResponse> generateMissingSceneScriptsLocked(String projectId) {
+        long startedAt = System.currentTimeMillis();
+        log.info("开始按顺序生成缺失 Scene 剧本: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "scene_scripts_generation", "scene_generating", 70, "开始按顺序生成 Scene 剧本");
+        projectService.getProjectEntity(projectId);
+        List<OutlineScene> outlineScenes = outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId);
+        if (outlineScenes.isEmpty()) {
+            throw new IllegalArgumentException("请先生成场景大纲");
+        }
+
+        for (OutlineScene outlineScene : outlineScenes) {
+            boolean exists = sceneScriptMapper.findByProjectIdAndSceneId(projectId, outlineScene.getSceneId()).isPresent();
+            if (!exists) {
+                generateSceneScript(projectId, outlineScene.getSceneId(), false);
+            }
+        }
+
+        projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
+        List<SceneScriptResponse> scripts = listSceneScripts(projectId);
+        progressEventPublisher.jobCompleted(projectId, "completed", 100, true, "全部 Scene 剧本已按顺序生成");
+        log.info(
+                "缺失 Scene 剧本生成完成: projectId={}, scriptCount={}, elapsedMs={}",
+                projectId,
+                scripts.size(),
+                System.currentTimeMillis() - startedAt
+        );
+        return scripts;
     }
 
     @Transactional

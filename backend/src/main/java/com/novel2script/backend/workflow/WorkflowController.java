@@ -87,6 +87,11 @@ public class WorkflowController {
         return ApiResponse.ok(workflowJobService.submitIncrementalOutlineGeneration(projectId));
     }
 
+    @PostMapping("/jobs/scenes")
+    public ApiResponse<WorkflowJobResponse> submitSceneScriptsGenerationJob(@PathVariable String projectId) {
+        return ApiResponse.ok(workflowJobService.submitSceneScriptsGeneration(projectId));
+    }
+
     @GetMapping("/jobs/{jobId}")
     public ApiResponse<WorkflowJobResponse> getWorkflowJob(@PathVariable String projectId, @PathVariable String jobId) {
         return ApiResponse.ok(workflowJobService.getJob(projectId, jobId));
