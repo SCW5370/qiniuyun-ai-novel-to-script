@@ -10,11 +10,13 @@ import com.novel2script.backend.scene.dto.SceneScriptResponse;
 import com.novel2script.backend.workflow.dto.ValidationReportResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -29,52 +31,70 @@ public class WorkflowService {
 
     private final ProjectOperationLock projectOperationLock;
 
+    private final ProgressEventPublisher progressEventPublisher;
+
+    private final int maxAutoGenerateScenes;
+
     public WorkflowService(
             ProjectService projectService,
             SceneGenerationService sceneGenerationService,
-            ProjectOperationLock projectOperationLock
+            ProjectOperationLock projectOperationLock,
+            ProgressEventPublisher progressEventPublisher,
+            @Value("${WORKFLOW_MAX_AUTO_GENERATE_SCENES:30}") int maxAutoGenerateScenes
     ) {
         this.projectService = projectService;
         this.sceneGenerationService = sceneGenerationService;
         this.projectOperationLock = projectOperationLock;
+        this.progressEventPublisher = progressEventPublisher;
+        this.maxAutoGenerateScenes = Math.max(0, maxAutoGenerateScenes);
     }
 
     @Transactional
-    public ValidationReportResponse validateProject(String projectId) {
-        return projectOperationLock.execute(projectId, () -> validateProjectLocked(projectId));
+    public ValidationReportResponse validateProject(String projectId, boolean force) {
+        return projectOperationLock.execute(projectId, () -> validateProjectLocked(projectId, force));
     }
 
-    private ValidationReportResponse validateProjectLocked(String projectId) {
+    private ValidationReportResponse validateProjectLocked(String projectId, boolean force) {
         long startedAt = System.currentTimeMillis();
         log.info("开始校验项目: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "validation", "validating", 86, "开始执行结构校验");
         projectService.getProjectEntity(projectId);
         List<OutlineSceneResponse> outline = sceneGenerationService.listOutline(projectId);
+        ensureAutoGenerationAllowed(projectId, outline, force, "结构校验");
         List<ValidationReportResponse.ValidationItemResponse> items = new ArrayList<>();
 
         for (OutlineSceneResponse outlineScene : outline) {
             SceneScriptResponse scene = sceneGenerationService.getSceneScript(projectId, outlineScene.getSceneId());
             if (scene.getAction().isEmpty()) {
-                items.add(new ValidationReportResponse.ValidationItemResponse(
+                ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                         scene.getSceneId(), "error", "action", "Scene 缺少动作描写"
-                ));
+                );
+                items.add(item);
+                progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
             }
             if (scene.getDialogue().isEmpty()) {
-                items.add(new ValidationReportResponse.ValidationItemResponse(
+                ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                         scene.getSceneId(), "warning", "dialogue", "Scene 暂无对白"
-                ));
+                );
+                items.add(item);
+                progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
             }
             Set<String> allowedCharacters = new HashSet<>(outlineScene.getCharacters());
             for (SceneScriptResponse.DialogueResponse dialogue : scene.getDialogue()) {
                 if (!allowedCharacters.isEmpty() && !allowedCharacters.contains(dialogue.characterId())) {
-                    items.add(new ValidationReportResponse.ValidationItemResponse(
+                    ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                             scene.getSceneId(), "warning", "dialogue", "对白角色 " + dialogue.characterId() + " 未出现在场景大纲角色列表中"
-                    ));
+                    );
+                    items.add(item);
+                    progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
                 }
             }
             for (String warning : scene.getWarnings()) {
-                items.add(new ValidationReportResponse.ValidationItemResponse(
+                ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                         scene.getSceneId(), "warning", "warnings", warning
-                ));
+                );
+                items.add(item);
+                progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
             }
         }
 
@@ -87,19 +107,22 @@ public class WorkflowService {
                 items.size(),
                 System.currentTimeMillis() - startedAt
         );
+        progressEventPublisher.jobCompleted(projectId, "validated", 90, false, "结构校验完成，状态：" + status);
         return new ValidationReportResponse(projectId, status, items);
     }
 
     @Transactional
-    public String exportYaml(String projectId) {
-        return projectOperationLock.execute(projectId, () -> exportYamlLocked(projectId));
+    public String exportYaml(String projectId, boolean force) {
+        return projectOperationLock.execute(projectId, () -> exportYamlLocked(projectId, force));
     }
 
-    private String exportYamlLocked(String projectId) {
+    private String exportYamlLocked(String projectId, boolean force) {
         long startedAt = System.currentTimeMillis();
         log.info("开始导出 YAML: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "yaml_export", "exporting", 95, "开始导出 YAML");
         Project project = projectService.getProjectEntity(projectId);
         List<OutlineSceneResponse> outline = sceneGenerationService.listOutline(projectId);
+        ensureAutoGenerationAllowed(projectId, outline, force, "YAML 导出");
         List<SceneScriptResponse> scenes = new ArrayList<>();
         for (OutlineSceneResponse outlineScene : outline) {
             scenes.add(sceneGenerationService.getSceneScript(projectId, outlineScene.getSceneId()));
@@ -140,7 +163,24 @@ public class WorkflowService {
                 yamlContent.length(),
                 System.currentTimeMillis() - startedAt
         );
+        progressEventPublisher.jobCompleted(projectId, "completed", 100, true, "YAML 导出完成");
         return yamlContent;
+    }
+
+    private void ensureAutoGenerationAllowed(String projectId, List<OutlineSceneResponse> outline, boolean force, String operationName) {
+        Set<String> generatedSceneIds = new LinkedHashSet<>();
+        for (SceneScriptResponse scene : sceneGenerationService.listSceneScripts(projectId)) {
+            generatedSceneIds.add(scene.getSceneId());
+        }
+        long missingCount = outline.stream()
+                .filter(scene -> !generatedSceneIds.contains(scene.getSceneId()))
+                .count();
+        if (!force && missingCount > maxAutoGenerateScenes) {
+            throw new IllegalArgumentException(
+                    operationName + "需要自动生成 " + missingCount + " 个 Scene，超过当前上限 "
+                            + maxAutoGenerateScenes + "。请先分批生成 Scene，或使用 force=true 明确执行。"
+            );
+        }
     }
 
     private String escapeYaml(String value) {

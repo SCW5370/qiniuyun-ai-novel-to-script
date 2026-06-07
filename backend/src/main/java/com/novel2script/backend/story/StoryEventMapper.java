@@ -13,6 +13,8 @@ public interface StoryEventMapper {
 
     int insertBatch(@Param("events") List<StoryEvent> events);
 
+    int updateEventOrder(@Param("id") Long id, @Param("eventOrder") Integer eventOrder);
+
     List<StoryEvent> findByProjectIdOrderByEventOrderAsc(@Param("projectId") String projectId);
 
     int deleteByProjectId(@Param("projectId") String projectId);

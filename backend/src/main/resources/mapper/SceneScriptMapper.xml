@@ -54,6 +54,13 @@
           and scene_id = #{sceneId}
     </select>
 
+    <update id="updateSeqNoByProjectIdAndSceneId">
+        update scene_scripts
+        set seq_no = #{seqNo}
+        where project_id = #{projectId}
+          and scene_id = #{sceneId}
+    </update>
+
     <delete id="deleteByProjectIdAndSceneId">
         delete from scene_scripts
         where project_id = #{projectId}

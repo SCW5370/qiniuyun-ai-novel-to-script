@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   analyzeStoryAssets,
+  analyzeStoryAssetsIncremental,
+  appendProjectSource,
+  appendProjectSourceFile,
   createProject,
   exportProjectYaml,
+  generateProjectOutlineIncremental,
   getProject,
   getProjectChapters,
   getProjectOutline,
@@ -13,6 +17,7 @@ import {
   regenerateProjectScene,
   summarizeProjectChapters,
   submitProjectSource,
+  uploadProjectSourceFile,
   validateProjectScenes
 } from "./api/client";
 import type {
@@ -48,16 +53,25 @@ const phaseKeyToLabel: Record<string, string> = {
   created: "项目创建",
   source_submitted: "文本处理",
   chaptered: "文本处理",
+  summarizing: "文本处理",
+  entity_extracting: "实体抽取",
   entity_ready: "实体抽取",
+  outline_generating: "场景规划",
   outlined: "场景规划",
   scene_generating: "Scene 生成",
+  validating: "结构校验",
+  validated: "结构校验",
+  exporting: "YAML 导出",
   completed: "YAML 导出",
   failed: "Scene 生成"
 };
 
 const analysisModeLabels: Record<string, string> = {
   AI: "AI 抽取",
-  FALLBACK: "规则兜底"
+  FALLBACK: "规则兜底",
+  INCREMENTAL_AI: "增量 AI 抽取",
+  INCREMENTAL_FALLBACK: "增量规则兜底",
+  INCREMENTAL_NONE: "无新增章节"
 };
 
 const projectStatusLabels: Record<string, string> = {
@@ -158,6 +172,7 @@ function App() {
   const [projectKeyword, setProjectKeyword] = useState("");
   const [projectTitleInput, setProjectTitleInput] = useState("");
   const [sourceTextInput, setSourceTextInput] = useState("");
+  const [sourceFileInput, setSourceFileInput] = useState<File | null>(null);
   const [project, setProject] = useState<ProjectViewModel>(mockProject);
   const [chapters, setChapters] = useState<ChapterViewModel[]>([]);
   const [outlineScenes, setOutlineScenes] = useState<OutlineSceneViewModel[]>(mockOutlineScenes);
@@ -200,6 +215,9 @@ function App() {
   const [isSummarizingChapters, setIsSummarizingChapters] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRegeneratingScene, setIsRegeneratingScene] = useState(false);
+  const [isStreamingScene, setIsStreamingScene] = useState(false);
+  const [sceneStreamContent, setSceneStreamContent] = useState("");
+  const [sceneStreamMessage, setSceneStreamMessage] = useState("");
   const [isValidatingProject, setIsValidatingProject] = useState(false);
   const [isExportingYaml, setIsExportingYaml] = useState(false);
   const isProjectOperationBusy =
@@ -207,6 +225,7 @@ function App() {
     isSummarizingChapters ||
     isAnalyzing ||
     isRegeneratingScene ||
+    isStreamingScene ||
     isValidatingProject ||
     isExportingYaml;
   const canLoadGeneratedScenes =
@@ -373,6 +392,62 @@ function App() {
     return result;
   }
 
+  async function completeSourceSubmission(nextChapters: ChapterViewModel[]) {
+    setChapters(nextChapters);
+    setOutlineScenes(mockOutlineScenes);
+    setOutlineSourceMode("mock");
+    setOutlineMessage("正文已更新，真实场景大纲生成后会自动替换当前 mock 大纲。");
+    setSceneDetail(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null);
+    setSceneDetailSourceMode("mock");
+    setSceneDetailMessage("正文已更新，真实 Scene 详情生成后会自动替换当前 mock 内容。");
+    setValidationReportData(mockValidationReport);
+    setValidationSourceMode("mock");
+    setValidationMessage("正文已更新，真实校验结果生成后会自动替换当前 mock 报告。");
+    setYamlPreviewContent(
+      buildYamlPreview(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null, project)
+    );
+    setYamlSourceMode("mock");
+    setYamlPreviewMessage("正文已更新，真实 YAML 导出就绪后会替换当前 mock 预览。");
+    setProgressStreamMessage("");
+    setProgressStreamPhase("");
+    setProgressStreamValue(null);
+    setProgressSourceMode("static");
+    setStoryEntities([]);
+    setStoryEvents([]);
+    setChapterSummaryMessage("");
+    setSourceSubmitMessage(
+      `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，正在自动执行故事分析。`
+    );
+
+    setIsAnalyzing(true);
+    try {
+      await runStoryAnalysis(project.projectId);
+      setSourceSubmitMessage(
+        `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，故事分析已完成。`
+      );
+    } catch (analysisError) {
+      const message = analysisError instanceof Error ? analysisError.message : "自动故事分析失败";
+      setAnalysisStatus("error");
+      setAnalysisMessage(message);
+      setSourceSubmitMessage(
+        `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，但自动分析失败，可点击“执行分析”重试。`
+      );
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function completeSourceAppend(nextChapters: ChapterViewModel[], appendedLabel: string) {
+    setChapters(nextChapters);
+    setSourceSubmitMessage(
+      `${appendedLabel}已追加到当前项目，当前共 ${nextChapters.length} 章。旧场景和剧本已保留；可点击“增量分析”处理新增章节。`
+    );
+    await loadProjectDetail(project.projectId);
+    await refreshProjectList();
+  }
+
   async function handleSubmitSourceText() {
     const content = sourceTextInput.trim();
     if (connectionMode !== "connected" || !content || isSubmittingSource || isAnalyzing) {
@@ -389,53 +464,80 @@ function App() {
     try {
       // 对齐开发契约：小说正文提交到 POST /api/projects/{projectId}/source。
       const nextChapters = await submitProjectSource(project.projectId, content);
-      setChapters(nextChapters);
-      setOutlineScenes(mockOutlineScenes);
-      setOutlineSourceMode("mock");
-      setOutlineMessage("正文已更新，真实场景大纲生成后会自动替换当前 mock 大纲。");
-      setSceneDetail(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null);
-      setSceneDetailSourceMode("mock");
-      setSceneDetailMessage("正文已更新，真实 Scene 详情生成后会自动替换当前 mock 内容。");
-      setValidationReportData(mockValidationReport);
-      setValidationSourceMode("mock");
-      setValidationMessage("正文已更新，真实校验结果生成后会自动替换当前 mock 报告。");
-      setYamlPreviewContent(
-        buildYamlPreview(mockSceneMap[mockOutlineScenes[0]?.sceneId] ?? null, project)
-      );
-      setYamlSourceMode("mock");
-      setYamlPreviewMessage("正文已更新，真实 YAML 导出就绪后会替换当前 mock 预览。");
-      setProgressStreamMessage("");
-      setProgressStreamPhase("");
-      setProgressStreamValue(null);
-      setProgressSourceMode("static");
-      setStoryEntities([]);
-      setStoryEvents([]);
       setSourceTextInput("");
-      setChapterSummaryMessage("");
-      setSourceSubmitMessage(
-        `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，正在自动执行故事分析。`
-      );
-
-      setIsAnalyzing(true);
-      try {
-        await runStoryAnalysis(project.projectId);
-        setSourceSubmitMessage(
-          `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，故事分析已完成。`
-        );
-      } catch (analysisError) {
-        const message = analysisError instanceof Error ? analysisError.message : "自动故事分析失败";
-        setAnalysisStatus("error");
-        setAnalysisMessage(message);
-        setSourceSubmitMessage(
-          `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，但自动分析失败，可点击“执行分析”重试。`
-        );
-        await loadProjectDetail(project.projectId);
-        await refreshProjectList();
-      } finally {
-        setIsAnalyzing(false);
-      }
+      await completeSourceSubmission(nextChapters);
     } catch (error) {
       const message = error instanceof Error ? error.message : "无法提交小说正文";
+      setSourceSubmitMessage(message);
+    } finally {
+      setIsSubmittingSource(false);
+    }
+  }
+
+  async function handleAppendSourceText() {
+    const content = sourceTextInput.trim();
+    if (connectionMode !== "connected" || !content || isSubmittingSource || isAnalyzing) {
+      return;
+    }
+
+    setIsSubmittingSource(true);
+    setProjectActionMessage("");
+    setSourceSubmitMessage("");
+
+    try {
+      // 追加章节只新增 source_chapters，不覆盖旧章节、旧资产和旧 Scene。
+      const nextChapters = await appendProjectSource(project.projectId, content);
+      setSourceTextInput("");
+      await completeSourceAppend(nextChapters, "文本章节");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法追加小说章节";
+      setSourceSubmitMessage(message);
+    } finally {
+      setIsSubmittingSource(false);
+    }
+  }
+
+  async function handleUploadSourceFile() {
+    if (connectionMode !== "connected" || !sourceFileInput || isSubmittingSource || isAnalyzing) {
+      return;
+    }
+
+    setIsSubmittingSource(true);
+    setProjectActionMessage("");
+    setSourceSubmitMessage("");
+    setAnalysisResult(null);
+    setAnalysisMessage("");
+    setAnalysisStatus("");
+
+    try {
+      // 对齐开发契约：文件上传由后端读取内容后复用正文提交和章节切分逻辑。
+      const nextChapters = await uploadProjectSourceFile(project.projectId, sourceFileInput);
+      setSourceFileInput(null);
+      await completeSourceSubmission(nextChapters);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法上传小说文件";
+      setSourceSubmitMessage(message);
+    } finally {
+      setIsSubmittingSource(false);
+    }
+  }
+
+  async function handleAppendSourceFile() {
+    if (connectionMode !== "connected" || !sourceFileInput || isSubmittingSource || isAnalyzing) {
+      return;
+    }
+
+    setIsSubmittingSource(true);
+    setProjectActionMessage("");
+    setSourceSubmitMessage("");
+
+    try {
+      // 追加文件只新增章节，避免误删用户已经生成或调整过的旧场景。
+      const nextChapters = await appendProjectSourceFile(project.projectId, sourceFileInput);
+      setSourceFileInput(null);
+      await completeSourceAppend(nextChapters, "文件章节");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法追加小说文件";
       setSourceSubmitMessage(message);
     } finally {
       setIsSubmittingSource(false);
@@ -486,6 +588,67 @@ function App() {
     }
   }
 
+  async function handleAnalyzeStoryAssetsIncremental() {
+    if (connectionMode !== "connected" || isAnalyzing) {
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysisResult(null);
+    setAnalysisMessage("");
+    setAnalysisStatus("");
+
+    try {
+      const result = await analyzeStoryAssetsIncremental(project.projectId);
+      setAnalysisResult(result);
+      setStoryEntities(result.entities);
+      setStoryEvents(result.events);
+      setStoryAssetsMessage("");
+      setStoryEventsMessage("");
+      setAnalysisStatus(result.fallbackUsed ? "warning" : "success");
+      setAnalysisMessage(
+        `${result.message}，当前共有 ${result.entityCount} 个实体和 ${result.eventCount} 个事件。`
+      );
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法执行增量故事资产分析";
+      setAnalysisStatus("error");
+      setAnalysisMessage(message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function handleGenerateIncrementalOutline() {
+    if (connectionMode !== "connected" || isProjectOperationBusy) {
+      return;
+    }
+
+    setOutlineMessage("正在为新增事件生成增量场景大纲...");
+
+    try {
+      const previousSceneIds = new Set(outlineScenes.map((scene) => scene.sceneId));
+      const nextScenes = await generateProjectOutlineIncremental(project.projectId);
+      setOutlineScenes(nextScenes);
+      setOutlineSourceMode("real");
+      const firstNewScene = nextScenes.find((scene) => !previousSceneIds.has(scene.sceneId));
+      if (firstNewScene) {
+        setSelectedSceneId(firstNewScene.sceneId);
+      }
+      setOutlineMessage(
+        firstNewScene
+          ? "新增事件已生成追加场景大纲。"
+          : "没有发现待生成场景大纲的新事件。"
+      );
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法生成增量场景大纲";
+      setOutlineMessage(message);
+    }
+  }
+
   async function handleRegenerateScene() {
     if (
       connectionMode !== "connected" ||
@@ -512,6 +675,87 @@ function App() {
     } finally {
       setIsRegeneratingScene(false);
     }
+  }
+
+  function handleStreamScenePreview() {
+    if (
+      connectionMode !== "connected" ||
+      outlineSourceMode !== "real" ||
+      !selectedSceneId ||
+      isProjectOperationBusy ||
+      isStreamingScene
+    ) {
+      return;
+    }
+
+    setIsStreamingScene(true);
+    setSceneStreamContent("");
+    setSceneStreamMessage("正在连接 AI 流式预览...");
+
+    const streamUrl = `${appConfig.apiBaseUrl}/projects/${encodeURIComponent(
+      project.projectId
+    )}/scenes/${encodeURIComponent(selectedSceneId)}/stream`;
+    const eventSource = new EventSource(streamUrl);
+    let closed = false;
+
+    function closeStream(message?: string) {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      eventSource.close();
+      setIsStreamingScene(false);
+      if (message) {
+        setSceneStreamMessage(message);
+      }
+    }
+
+    function readPayload(event: MessageEvent<string>) {
+      try {
+        return JSON.parse(event.data) as { content?: string; message?: string };
+      } catch {
+        closeStream("AI 流式预览返回数据格式异常。");
+        return null;
+      }
+    }
+
+    eventSource.addEventListener("started", (event) => {
+      const payload = readPayload(event as MessageEvent<string>);
+      if (!payload) {
+        return;
+      }
+      setSceneStreamMessage(payload.message ?? "AI 流式预览已开始。");
+    });
+
+    eventSource.addEventListener("chunk", (event) => {
+      const payload = readPayload(event as MessageEvent<string>);
+      if (!payload) {
+        return;
+      }
+      if (payload.content) {
+        setSceneStreamContent((current) => current + payload.content);
+      }
+    });
+
+    eventSource.addEventListener("done", (event) => {
+      const payload = readPayload(event as MessageEvent<string>);
+      if (!payload) {
+        return;
+      }
+      closeStream(payload.message ?? "Scene 预览流式生成完成。");
+    });
+
+    eventSource.addEventListener("failed", (event) => {
+      const payload = readPayload(event as MessageEvent<string>);
+      if (!payload) {
+        return;
+      }
+      closeStream(payload.message ?? "AI 流式预览失败。");
+    });
+
+    eventSource.onerror = () => {
+      closeStream("AI 流式预览连接已断开。");
+    };
   }
 
   async function handleValidateProject() {
@@ -806,6 +1050,8 @@ function App() {
 
   useEffect(() => {
     const mockScene = mockSceneMap[selectedSceneId] ?? null;
+    setSceneStreamContent("");
+    setSceneStreamMessage("");
 
     if (!selectedSceneId) {
       setSceneDetail(null);
@@ -956,6 +1202,13 @@ function App() {
     analysisResult?.generationMode == null
       ? ""
       : analysisModeLabels[analysisResult.generationMode] ?? analysisResult.generationMode;
+  const analysisReady =
+    storyEntities.length > 0 ||
+    storyEvents.length > 0 ||
+    project.status === "ENTITY_READY" ||
+    project.status === "OUTLINED" ||
+    project.status === "SCENE_GENERATING" ||
+    project.status === "COMPLETED";
   const selectedSceneIndex = outlineScenes.findIndex((scene) => scene.sceneId === selectedSceneId);
   const previousSceneId = selectedSceneIndex > 0 ? outlineScenes[selectedSceneIndex - 1]?.sceneId ?? "" : "";
   const nextSceneId =
@@ -1000,6 +1253,11 @@ function App() {
     : "";
   const projectStatusLabel = projectStatusLabels[project.status] ?? project.status;
   const currentPhaseLabel = phaseKeyToLabel[project.currentPhase] ?? activePhaseLabel;
+  const analysisStateLabel = analysisModeLabel
+    ? analysisModeLabel
+    : analysisReady
+      ? "分析已完成"
+      : "待执行分析";
   const chapterSummaryCount = chapters.filter((chapter) => chapter.summary?.trim()).length;
   const characterCount = storyEntities.filter((entity) => entity.entityType === "CHARACTER").length;
   const locationCount = storyEntities.filter((entity) => entity.entityType === "LOCATION").length;
@@ -1013,6 +1271,18 @@ function App() {
       : sceneDetail?.validationStatus ?? mockValidationReport.status;
   const sceneSelectionLabel =
     selectedSceneIndex >= 0 ? `${selectedSceneIndex + 1} / ${outlineScenes.length}` : "未选中";
+  const deliveryStatusLabel =
+    yamlSourceMode === "real"
+      ? "Ready"
+      : projectCompleted && connectionMode === "connected"
+        ? "可导出"
+        : "Pending";
+  const deliveryStatusCaption =
+    yamlSourceMode === "real"
+      ? "真实 YAML 已加载"
+      : projectCompleted && connectionMode === "connected"
+        ? "执行导出即可刷新最终稿"
+        : "YAML 导出链路";
   const workspaceTabs = [
     {
       id: "project" as const,
@@ -1032,7 +1302,12 @@ function App() {
     {
       id: "delivery" as const,
       label: "交付",
-      caption: yamlSourceMode === "real" ? "真实导出已就绪" : "校验与 YAML"
+      caption:
+        yamlSourceMode === "real"
+          ? "真实导出已就绪"
+          : projectCompleted && connectionMode === "connected"
+            ? "待刷新最终导出"
+            : "校验与 YAML"
     }
   ];
   const activePhaseIndex = Math.max(phaseLabels.indexOf(activePhaseLabel), 0);
@@ -1061,7 +1336,15 @@ function App() {
             disabled={connectionMode !== "connected" || isProjectOperationBusy}
             onClick={() => void handleAnalyzeStoryAssets()}
           >
-            {isAnalyzing ? "分析中..." : "执行分析"}
+            {isAnalyzing ? "分析中..." : "全量分析"}
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={connectionMode !== "connected" || isProjectOperationBusy}
+            onClick={() => void handleAnalyzeStoryAssetsIncremental()}
+          >
+            增量分析
           </button>
           <button
             className="ghost-button"
@@ -1095,9 +1378,7 @@ function App() {
             <div className="overview-pill-row">
               <span className="inline-pill">{outlineSourceMode === "real" ? "真实场景" : "Mock 场景"}</span>
               <span className="inline-pill">{yamlSourceMode === "real" ? "真实导出" : "预览模式"}</span>
-              <span className="inline-pill">
-                {analysisModeLabel ? analysisModeLabel : "待执行分析"}
-              </span>
+              <span className="inline-pill">{analysisStateLabel}</span>
             </div>
           </div>
         </div>
@@ -1171,8 +1452,8 @@ function App() {
           </article>
           <article className="metric-card">
             <span>交付状态</span>
-            <strong>{yamlSourceMode === "real" ? "Ready" : "Pending"}</strong>
-            <small>YAML 导出链路</small>
+            <strong>{deliveryStatusLabel}</strong>
+            <small>{deliveryStatusCaption}</small>
           </article>
         </div>
 
@@ -1306,14 +1587,57 @@ function App() {
               disabled={connectionMode !== "connected" || isProjectOperationBusy}
               placeholder="粘贴 3 章以上小说正文，提交后会自动执行切章与故事分析。"
             />
-            <button
-              className="primary-button"
-              type="button"
-              disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceTextInput.trim()}
-              onClick={() => void handleSubmitSourceText()}
-            >
-              {isSubmittingSource ? (isAnalyzing ? "分析中..." : "提交中...") : "提交到当前项目"}
-            </button>
+            <div className="source-actions">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceTextInput.trim()}
+                onClick={() => void handleSubmitSourceText()}
+              >
+                {isSubmittingSource ? (isAnalyzing ? "分析中..." : "提交中...") : "替换当前项目正文"}
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceTextInput.trim()}
+                onClick={() => void handleAppendSourceText()}
+              >
+                追加文本章节
+              </button>
+              <label className="file-picker">
+                <span>选择文件</span>
+                <input
+                  key={sourceFileInput ? sourceFileInput.name : "empty-source-file"}
+                  type="file"
+                  accept=".txt,.md,text/plain,text/markdown"
+                  disabled={connectionMode !== "connected" || isProjectOperationBusy}
+                  onChange={(event) => {
+                    setSourceFileInput(event.currentTarget.files?.[0] ?? null);
+                  }}
+                />
+              </label>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceFileInput}
+                onClick={() => void handleUploadSourceFile()}
+              >
+                上传文件并替换
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceFileInput}
+                onClick={() => void handleAppendSourceFile()}
+              >
+                追加文件章节
+              </button>
+            </div>
+            {sourceFileInput ? (
+              <div className="source-file-meta">
+                已选择：{sourceFileInput.name} / {Math.ceil(sourceFileInput.size / 1024)} KB
+              </div>
+            ) : null}
           </section>
         </aside>
 
@@ -1516,7 +1840,17 @@ function App() {
               <section className="panel outline-panel">
                 <div className="panel-header">
                   <h2>场景大纲</h2>
-                  <span>{outlineSourceMode === "real" ? `${outlineScenes.length} 场` : "Mock 回退"}</span>
+                  <div className="panel-header-actions">
+                    <span>{outlineSourceMode === "real" ? `${outlineScenes.length} 场` : "Mock 回退"}</span>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={connectionMode !== "connected" || isProjectOperationBusy}
+                      onClick={() => void handleGenerateIncrementalOutline()}
+                    >
+                      增量场景
+                    </button>
+                  </div>
                 </div>
                 {outlineMessage ? <div className="notice-banner">{outlineMessage}</div> : null}
                 {outlineScenes.length === 0 ? (
@@ -1559,7 +1893,7 @@ function App() {
                     <button
                       className="ghost-button"
                       type="button"
-                      disabled={!previousSceneId}
+                      disabled={!previousSceneId || isProjectOperationBusy}
                       onClick={() => setSelectedSceneId(previousSceneId)}
                     >
                       上一场
@@ -1567,7 +1901,7 @@ function App() {
                     <button
                       className="ghost-button"
                       type="button"
-                      disabled={!nextSceneId}
+                      disabled={!nextSceneId || isProjectOperationBusy}
                       onClick={() => setSelectedSceneId(nextSceneId)}
                     >
                       下一场
@@ -1585,11 +1919,31 @@ function App() {
                     >
                       {isRegeneratingScene ? "生成中..." : "重新生成"}
                     </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={
+                        connectionMode !== "connected" ||
+                        outlineSourceMode !== "real" ||
+                        !selectedSceneId ||
+                        isProjectOperationBusy
+                      }
+                      onClick={() => handleStreamScenePreview()}
+                    >
+                      {isStreamingScene ? "输出中..." : "流式预览"}
+                    </button>
                   </div>
                 </div>
                 {sceneDetailMessage ? <div className="notice-banner">{sceneDetailMessage}</div> : null}
+                {sceneStreamMessage ? <div className="notice-banner">{sceneStreamMessage}</div> : null}
                 {sceneFallbackMessage ? (
                   <div className="notice-banner notice-banner-warning">{sceneFallbackMessage}</div>
+                ) : null}
+                {sceneStreamContent ? (
+                  <div className="detail-block">
+                    <span className="detail-label">AI 流式预览</span>
+                    <pre className="code-block">{sceneStreamContent}</pre>
+                  </div>
                 ) : null}
                 {sceneDetail ? (
                   <div className="scene-detail">

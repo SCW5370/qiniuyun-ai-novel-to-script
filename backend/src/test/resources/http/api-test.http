@@ -18,6 +18,39 @@ Content-Type: text/plain; charset=utf-8
 
 < ../../../../../../小说.txt
 
+### 2-可选. 上传小说文件
+# 和上面的“提交小说正文”二选一执行即可；重复执行会替换当前项目旧章节。
+POST http://localhost:8080/api/projects/{{projectId}}/source/upload
+Content-Type: multipart/form-data; boundary=novel_upload
+
+--novel_upload
+Content-Disposition: form-data; name="file"; filename="小说.txt"
+Content-Type: text/plain; charset=utf-8
+
+< ../../../../../../小说.txt
+--novel_upload--
+
+### 2-可选. 追加小说文本章节
+# 追加接口不会删除当前项目旧章节、旧场景和旧剧本。
+POST http://localhost:8080/api/projects/{{projectId}}/chapters/append
+Content-Type: application/json; charset=utf-8
+
+{
+  "content": "第三章 霓虹深处\n林舟把新的线索夹进旧书页。"
+}
+
+### 2-可选. 追加小说文件章节
+# 和上面的追加文本二选一执行即可；新章节会从当前最大 chapterNo 后继续编号。
+POST http://localhost:8080/api/projects/{{projectId}}/chapters/append
+Content-Type: multipart/form-data; boundary=novel_append
+
+--novel_append
+Content-Disposition: form-data; name="file"; filename="小说.txt"
+Content-Type: text/plain; charset=utf-8
+
+< ../../../../../../小说.txt
+--novel_append--
+
 ### 3. 查询章节，确认小说已经写入数据库
 GET http://localhost:8080/api/projects/{{projectId}}/chapters
 
@@ -29,6 +62,10 @@ POST http://localhost:8080/api/projects/{{projectId}}/chapters/summarize
 # aiSuccess=true 表示 AI 抽取成功；fallbackUsed=true 表示 AI 失败后使用了规则兜底。
 POST http://localhost:8080/api/projects/{{projectId}}/analyze
 
+### 5-可选. 增量分析新增章节
+# 先执行追加章节请求，再执行本请求；它只处理尚未生成 story_events 的新增章节。
+POST http://localhost:8080/api/projects/{{projectId}}/analyze/incremental
+
 ### 6. 查询角色和地点
 GET http://localhost:8080/api/projects/{{projectId}}/entities
 
@@ -37,6 +74,10 @@ GET http://localhost:8080/api/projects/{{projectId}}/story-events
 
 ### 8. 生成并查询场景大纲
 GET http://localhost:8080/api/projects/{{projectId}}/outline
+
+### 8-可选. 为新增事件增量生成场景大纲
+# 先执行追加章节和增量分析，再执行本请求。
+POST http://localhost:8080/api/projects/{{projectId}}/outline/incremental
 
 ### 9. 查询第一个场景剧本
 GET http://localhost:8080/api/projects/{{projectId}}/scenes/S001

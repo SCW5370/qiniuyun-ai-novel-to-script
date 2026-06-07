@@ -35,6 +35,12 @@
         </foreach>
     </insert>
 
+    <update id="updateEventOrder">
+        update story_events
+        set event_order = #{eventOrder}
+        where id = #{id}
+    </update>
+
     <select id="findByProjectIdOrderByEventOrderAsc" resultMap="StoryEventResultMap">
         select id, project_id, event_id, chapter_id, event_order, title, summary,
                source_refs_json, created_at, updated_at

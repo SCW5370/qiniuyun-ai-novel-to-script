@@ -53,7 +53,9 @@ public class AiChapterSummaryGenerator implements ChapterSummaryGenerator {
                 1. 摘要使用中文。
                 2. 控制在 120 到 200 字。
                 3. 保留主要人物、地点、冲突、关键行动。
-                4. 只返回 JSON：{"summary":"..."}
+                4. 不扩写原文没有出现的信息，不评价文本质量。
+                5. 只返回 JSON：{"summary":"..."}
+                6. 不要使用 Markdown 代码块包裹 JSON。
 
                 章节标题：%s
                 章节正文：

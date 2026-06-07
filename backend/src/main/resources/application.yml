@@ -11,6 +11,10 @@ spring:
     username: ${MYSQL_APP_USERNAME:novel2script_app}
     password: ${MYSQL_APP_PASSWORD:dev_app_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  servlet:
+    multipart:
+      max-file-size: ${SOURCE_FILE_MAX_MB:20}MB
+      max-request-size: ${SOURCE_REQUEST_MAX_MB:22}MB
   sql:
     init:
       mode: always

@@ -49,6 +49,12 @@
             status = values(status)
     </insert>
 
+    <update id="updateSeqNo">
+        update outline_scenes
+        set seq_no = #{seqNo}
+        where id = #{id}
+    </update>
+
     <select id="findByProjectIdOrderBySeqNoAsc" resultMap="OutlineSceneResultMap">
         select id, project_id, scene_id, seq_no, title, int_ext, location_id, time_of_day,
                purpose_plot, purpose_character, characters_json, source_refs_json, status,

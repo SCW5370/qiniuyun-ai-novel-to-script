@@ -1,6 +1,47 @@
 # SSE Events
 
-本文档定义生成过程中的服务端事件。B 线前端工作台只消费本文档中的事件名和数据形状。
+本文档定义项目进度事件。当前 `main` 只有一次性状态快照，真正的长任务实时推送将在后续独立 PR 中实现。
+
+## Current Implementation
+
+当前接口：
+
+```http
+GET /api/projects/{projectId}/events
+```
+
+当前行为：
+
+- 使用 SSE 响应格式。
+- 建立连接后读取当前项目状态。
+- 发送 `phase.changed`。
+- 发送 `job.completed` 快照事件。
+- 随后关闭连接。
+
+当前 `phase.changed` 示例：
+
+```json
+{
+  "projectId": "proj_20260606_001",
+  "phase": "entity_ready",
+  "message": "已连接项目进度流"
+}
+```
+
+当前 `job.completed` 示例：
+
+```json
+{
+  "projectId": "proj_20260606_001",
+  "phase": "entity_ready",
+  "progress": 100,
+  "exportReady": false
+}
+```
+
+## Target Real-Time Contract
+
+以下事件是后续真实 SSE 进度流的目标契约。实现前端或后端时必须保持事件名和 payload 字段兼容。
 
 ## Event Names
 

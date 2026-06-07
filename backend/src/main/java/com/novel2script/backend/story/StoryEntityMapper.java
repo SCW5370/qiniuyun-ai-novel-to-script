@@ -13,6 +13,8 @@ public interface StoryEntityMapper {
 
     int insertBatch(@Param("entities") List<StoryEntity> entities);
 
+    int updateMergedEntity(@Param("entity") StoryEntity entity);
+
     List<StoryEntity> findByProjectId(@Param("projectId") String projectId);
 
     int deleteByProjectId(@Param("projectId") String projectId);

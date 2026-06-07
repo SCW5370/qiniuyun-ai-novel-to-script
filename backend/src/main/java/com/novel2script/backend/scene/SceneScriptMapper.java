@@ -15,6 +15,12 @@ public interface SceneScriptMapper {
 
     Optional<SceneScript> findByProjectIdAndSceneId(@Param("projectId") String projectId, @Param("sceneId") String sceneId);
 
+    int updateSeqNoByProjectIdAndSceneId(
+            @Param("projectId") String projectId,
+            @Param("sceneId") String sceneId,
+            @Param("seqNo") Integer seqNo
+    );
+
     int deleteByProjectIdAndSceneId(@Param("projectId") String projectId, @Param("sceneId") String sceneId);
 
     int deleteByProjectId(@Param("projectId") String projectId);

@@ -27,6 +27,11 @@ public class StoryAnalysisController {
         return ApiResponse.ok(storyAnalysisService.analyze(projectId));
     }
 
+    @PostMapping("/analyze/incremental")
+    public ApiResponse<StoryAnalysisResponse> analyzeIncremental(@PathVariable String projectId) {
+        return ApiResponse.ok(storyAnalysisService.analyzeIncremental(projectId));
+    }
+
     @GetMapping("/entities")
     public ApiResponse<List<StoryEntityResponse>> listEntities(@PathVariable String projectId) {
         return ApiResponse.ok(storyAnalysisService.listEntities(projectId));

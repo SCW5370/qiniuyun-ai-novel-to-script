@@ -7,6 +7,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.io.IOException;
+
 /**
  * 简单的全局异常处理，首版先保证接口不会直接把堆栈暴露给前端。
  */
@@ -30,6 +32,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(HttpMessageNotReadableException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.fail("请求体不是合法 JSON，请检查引号和转义"));
+    }
+
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<Void> handleIOException(IOException ex) {
+        return ResponseEntity.noContent().build();
     }
 
     @ExceptionHandler(Exception.class)

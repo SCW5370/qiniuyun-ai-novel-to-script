@@ -14,9 +14,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-import java.util.Map;
-
 @RestController
 @RequestMapping("/api/projects/{projectId}")
 public class WorkflowController {
@@ -25,47 +22,43 @@ public class WorkflowController {
 
     private final ProjectService projectService;
 
-    public WorkflowController(WorkflowService workflowService, ProjectService projectService) {
+    private final ProgressEventPublisher progressEventPublisher;
+
+    public WorkflowController(
+            WorkflowService workflowService,
+            ProjectService projectService,
+            ProgressEventPublisher progressEventPublisher
+    ) {
         this.workflowService = workflowService;
         this.projectService = projectService;
+        this.progressEventPublisher = progressEventPublisher;
     }
 
     @PostMapping("/validate")
-    public ApiResponse<ValidationReportResponse> validateProject(@PathVariable String projectId) {
-        return ApiResponse.ok(workflowService.validateProject(projectId));
+    public ApiResponse<ValidationReportResponse> validateProject(
+            @PathVariable String projectId,
+            @RequestParam(defaultValue = "false") boolean force
+    ) {
+        return ApiResponse.ok(workflowService.validateProject(projectId, force));
     }
 
     @GetMapping(value = "/export", produces = "text/yaml;charset=UTF-8")
-    public ResponseEntity<String> exportProject(@PathVariable String projectId, @RequestParam(defaultValue = "yaml") String format) {
+    public ResponseEntity<String> exportProject(
+            @PathVariable String projectId,
+            @RequestParam(defaultValue = "yaml") String format,
+            @RequestParam(defaultValue = "false") boolean force
+    ) {
         if (!"yaml".equalsIgnoreCase(format)) {
             throw new IllegalArgumentException("暂只支持 YAML 导出");
         }
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("text/yaml;charset=UTF-8"))
-                .body(workflowService.exportYaml(projectId));
+                .body(workflowService.exportYaml(projectId, force));
     }
 
     @GetMapping("/events")
-    public SseEmitter streamEvents(@PathVariable String projectId) throws IOException {
+    public SseEmitter streamEvents(@PathVariable String projectId) {
         Project project = projectService.getProjectEntity(projectId);
-        SseEmitter emitter = new SseEmitter(10_000L);
-        String phase = project.getStatus().name().toLowerCase();
-        emitter.send(SseEmitter.event()
-                .name("phase.changed")
-                .data(Map.of(
-                        "projectId", projectId,
-                        "phase", phase,
-                        "message", "已连接项目进度流"
-                )));
-        emitter.send(SseEmitter.event()
-                .name("job.completed")
-                .data(Map.of(
-                        "projectId", projectId,
-                        "phase", phase,
-                        "progress", 100,
-                        "exportReady", project.getStatus().name().equals("COMPLETED")
-                )));
-        emitter.complete();
-        return emitter;
+        return progressEventPublisher.subscribe(project);
     }
 }

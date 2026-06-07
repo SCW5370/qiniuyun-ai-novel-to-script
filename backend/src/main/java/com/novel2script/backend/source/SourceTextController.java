@@ -10,7 +10,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -33,6 +35,30 @@ public class SourceTextController {
             @Valid @RequestBody SubmitSourceRequest request
     ) {
         return ApiResponse.ok(sourceTextService.submitSource(projectId, request));
+    }
+
+    @PostMapping(value = "/source/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<List<ChapterResponse>> uploadSourceFile(
+            @PathVariable String projectId,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ApiResponse.ok(sourceTextService.submitSourceFile(projectId, file));
+    }
+
+    @PostMapping(value = "/chapters/append", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ApiResponse<List<ChapterResponse>> appendSource(
+            @PathVariable String projectId,
+            @Valid @RequestBody SubmitSourceRequest request
+    ) {
+        return ApiResponse.ok(sourceTextService.appendSource(projectId, request));
+    }
+
+    @PostMapping(value = "/chapters/append", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<List<ChapterResponse>> appendSourceFile(
+            @PathVariable String projectId,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ApiResponse.ok(sourceTextService.appendSourceFile(projectId, file));
     }
 
     @PostMapping(value = "/source", consumes = MediaType.TEXT_PLAIN_VALUE)

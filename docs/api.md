@@ -8,7 +8,9 @@
 - 数据格式：`application/json`
 - 字符编码：`UTF-8`
 - 当前接口前缀：`/api`
-- AI 配置从本地 `.env` 读取：`AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL_ID`
+- AI 配置从本地 `.env` 读取：`AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL_ID`、`AI_TIMEOUT_SECONDS`、`AI_MAX_RETRIES`
+- 小说上传限制从本地 `.env` 读取：`SOURCE_FILE_MAX_MB`、`SOURCE_REQUEST_MAX_MB`
+- 工作流保护配置从本地 `.env` 读取：`WORKFLOW_MAX_AUTO_GENERATE_SCENES`
 
 ## 通用响应结构
 
@@ -213,6 +215,70 @@ POST /api/projects/{projectId}/source
 }
 ```
 
+## 上传小说文件
+
+```http
+POST /api/projects/{projectId}/source/upload
+Content-Type: multipart/form-data
+```
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `projectId` | string | 项目 ID，格式 `proj_YYYYMMDD_xxxxxx` |
+
+表单字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | file | 是 | 小说文件，仅支持 `.txt` 或 `.md` |
+
+处理规则：
+
+- 后端读取上传文件内容后，复用 `POST /api/projects/{projectId}/source` 的章节切分和入库逻辑。
+- 文件大小默认不能超过 20MB，可通过 `SOURCE_FILE_MAX_MB` 调整。
+- 编码优先按 UTF-8 解析，失败时使用 GB18030 兜底。
+- 上传成功后会替换该项目旧章节，并清空旧的实体、事件、场景大纲和 Scene 结果。
+
+成功响应与“提交小说文本”一致，返回切分后的章节列表。
+
+## 追加小说章节
+
+```http
+POST /api/projects/{projectId}/chapters/append
+```
+
+支持两种请求形式：
+
+JSON 文本：
+
+```json
+{
+  "content": "第三章 新雨\n林舟再次回到旧书店。"
+}
+```
+
+文件上传：
+
+```http
+Content-Type: multipart/form-data
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `content` | string | JSON 请求必填 | 要追加的小说正文 |
+| `file` | file | multipart 请求必填 | 要追加的 `.txt` 或 `.md` 小说文件 |
+
+处理规则：
+
+- 追加接口不会删除旧章节、旧实体、旧事件、旧场景大纲或旧 Scene 剧本。
+- 后端会先切分本次提交内容，再从当前项目最大 `chapterNo` 后继续编号。
+- 如果当前项目已有 3 章，本次切分出 2 章，则新章节编号为 4、5。
+- 当前版本只负责追加章节入库；新增章节的增量分析和增量场景生成会在后续接口中实现。
+
+成功响应与“提交小说文本”一致，返回追加后的完整章节列表。
+
 ## 查询章节列表
 
 ```http
@@ -297,10 +363,12 @@ POST /api/projects/{projectId}/analyze
 处理规则：
 
 - 该接口依赖项目已经完成章节切分。
-- 首版使用规则抽取角色、地点和章节事件，后续可替换为 LLM 抽取。
-- 执行时会删除该项目旧的实体和事件分析结果，并写入新的结果。
+- 当前实现为 AI 优先、规则兜底。
+- 执行时会删除该项目旧的实体、事件、场景大纲和 Scene 剧本，并写入新的故事资产结果。
 - 成功后项目状态更新为 `ENTITY_READY`。
-- 当前实现为 AI 优先、规则兜底；AI 不可用时仍返回基础结构，避免联调中断。
+- AI 不可用时仍返回基础结构，避免联调中断。
+- 中长篇会按章节自动拆成多个 AI 批次，避免一次性把全书塞进模型上下文导致后续章节被截断。
+- 响应中的 `aiSuccess`、`fallbackUsed`、`generationMode`、`message` 用于前端展示本次分析是否由 AI 完成。
 
 成功响应：
 
@@ -313,6 +381,10 @@ POST /api/projects/{projectId}/analyze
     "status": "ENTITY_READY",
     "entityCount": 1,
     "eventCount": 1,
+    "generationMode": "AI",
+    "aiSuccess": true,
+    "fallbackUsed": false,
+    "message": "故事资产由 AI 抽取生成",
     "entities": [
       {
         "entityId": "C001",
@@ -340,6 +412,37 @@ POST /api/projects/{projectId}/analyze
   }
 }
 ```
+
+## 增量分析新增章节
+
+```http
+POST /api/projects/{projectId}/analyze/incremental
+```
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `projectId` | string | 项目 ID，格式 `proj_YYYYMMDD_xxxxxx` |
+
+处理规则：
+
+- 该接口用于章节追加后的增量分析。
+- 后端会找出尚未生成 `story_events` 的章节，只分析这些新增章节。
+- 新增章节较多时同样会按章节拆成多个 AI 批次。
+- 旧实体、旧事件、旧场景大纲和旧 Scene 剧本不会被删除。
+- 新实体会按实体类型、名称和别名尝试合并到已有实体；无法匹配时才分配新的 `C###` 或 `L###`。
+- 新事件会从当前最大 `eventOrder` 和最大 `E###` 后继续追加。
+- 写入新事件后，后端会按章节真实顺序重排所有事件的 `eventOrder`，保留原有 `eventId`。
+- 如果没有发现待分析的新章节，会返回现有实体和事件，并在 `message` 中说明。
+
+成功响应结构与“分析故事中间资产”一致。`generationMode` 可能为：
+
+| 值 | 说明 |
+| --- | --- |
+| `INCREMENTAL_AI` | 新增章节由 AI 抽取 |
+| `INCREMENTAL_FALLBACK` | AI 失败后使用规则兜底 |
+| `INCREMENTAL_NONE` | 没有待增量分析的新章节 |
 
 ## 查询故事实体
 
@@ -409,6 +512,7 @@ GET /api/projects/{projectId}/outline
 
 - 依赖已执行 `POST /api/projects/{projectId}/analyze`。
 - 首次查询时会生成并保存真实场景大纲。
+- 事件较多时会按事件批次生成场景大纲，避免一次性超过 AI 上下文。
 - 成功后项目状态更新为 `OUTLINED`。
 
 成功响应：
@@ -438,6 +542,24 @@ GET /api/projects/{projectId}/outline
   ]
 }
 ```
+
+## 增量生成场景大纲
+
+```http
+POST /api/projects/{projectId}/outline/incremental
+```
+
+说明：
+
+- 用于章节追加并完成 `POST /api/projects/{projectId}/analyze/incremental` 后，为新增事件追加场景大纲。
+- 旧场景大纲和旧 Scene 剧本不会被删除或重写。
+- 后端通过已有场景大纲的 `sourceRefs` 判断哪些事件已经生成过场景。
+- 新增事件较多时会按事件批次生成追加场景。
+- 新场景会从当前最大 `seqNo` 和最大 `S###` 后继续编号。
+- 写入新场景后，后端会按 `sourceRefs` 对应章节顺序重排所有场景的 `seqNo`，保留原有 `sceneId` 和已生成的 Scene 剧本。
+- 如果没有发现待生成场景的新事件，会返回当前完整场景大纲列表。
+
+成功响应结构与“查询场景大纲”一致，返回追加后的完整场景大纲列表。
 
 ## 查询 Scene 详情
 
@@ -490,6 +612,96 @@ GET /api/projects/{projectId}/scenes
 ```http
 POST /api/projects/{projectId}/scenes/{sceneId}/regenerate
 ```
+
+## 结构校验
+
+```http
+POST /api/projects/{projectId}/validate?force=false
+```
+
+说明：
+
+- 结构校验用于检查当前项目已生成 Scene 的基础可用性。
+- 校验会读取场景大纲和 Scene 详情；如果 Scene 尚未生成，后端会按现有生成逻辑补齐后再校验。
+- 为避免中长篇项目误触发大量 AI 调用，默认最多自动补齐 `WORKFLOW_MAX_AUTO_GENERATE_SCENES` 个缺失 Scene。
+- 如果确认需要一次性补齐并校验，可以传入 `force=true` 明确执行。
+- 当前校验规则包括：动作描写是否为空、对白是否为空、对白角色是否出现在该场景角色列表中、Scene 自身 warnings。
+- 校验不会改写小说正文、角色、地点或故事事件。
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {
+    "projectId": "proj_20260606_000001",
+    "status": "WARNING",
+    "items": [
+      {
+        "sceneId": "S001",
+        "level": "warning",
+        "field": "dialogue",
+        "message": "对白角色 C001 未出现在场景大纲角色列表中"
+      }
+    ]
+  }
+}
+```
+
+## 导出 YAML
+
+```http
+GET /api/projects/{projectId}/export?format=yaml&force=false
+```
+
+说明：
+
+- 当前只支持 `format=yaml`。
+- 导出前会读取场景大纲和 Scene 详情；如果 Scene 尚未生成，后端会按现有生成逻辑补齐后导出。
+- 为避免中长篇项目误触发大量 AI 调用，默认最多自动补齐 `WORKFLOW_MAX_AUTO_GENERATE_SCENES` 个缺失 Scene。
+- 如果确认需要一次性补齐并导出，可以传入 `force=true` 明确执行。
+- 导出成功后项目状态更新为 `COMPLETED`。
+- 该接口直接返回 `text/yaml;charset=UTF-8`，不包裹通用 JSON 响应。
+
+成功响应示例：
+
+```yaml
+schema_version: "1.0.0"
+meta:
+  project_id: "proj_20260606_000001"
+  title: "雨夜旧书店"
+  workflow: "reader-outline-writer-validator"
+scenes:
+  - scene_id: "S001"
+    seq_no: 1
+    title: "雨夜闯店"
+    action:
+      - "林舟推门而入，雨水顺着衣角滴在旧木地板上。"
+    dialogue:
+      - character_id: "C001"
+        line: "老板，还营业吗？"
+    source_refs:
+      - "ch1"
+    validation_status: "PASSED"
+```
+
+## 进度事件快照
+
+```http
+GET /api/projects/{projectId}/events
+```
+
+说明：
+
+- 当前接口使用 SSE 响应格式，但只发送当前项目状态快照后关闭连接。
+- 现阶段它不是完整实时进度流；真正的长任务阶段推送将在独立 SSE PR 中实现。
+- 故事事件列表接口是 `/story-events`，不要使用 `/events` 查询故事事件。
+
+当前会发送：
+
+- `phase.changed`：当前项目状态对应的阶段。
+- `job.completed`：当前快照完成事件，包含 `exportReady`。
 
 ## 调试示例
 

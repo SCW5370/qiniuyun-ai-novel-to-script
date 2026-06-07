@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -26,6 +27,11 @@ public class SceneGenerationController {
         return ApiResponse.ok(sceneGenerationService.listOutline(projectId));
     }
 
+    @PostMapping("/outline/incremental")
+    public ApiResponse<List<OutlineSceneResponse>> generateIncrementalOutline(@PathVariable String projectId) {
+        return ApiResponse.ok(sceneGenerationService.generateIncrementalOutline(projectId));
+    }
+
     @GetMapping("/scenes")
     public ApiResponse<List<SceneScriptResponse>> listSceneScripts(@PathVariable String projectId) {
         return ApiResponse.ok(sceneGenerationService.listSceneScripts(projectId));
@@ -39,5 +45,10 @@ public class SceneGenerationController {
     @PostMapping("/scenes/{sceneId}/regenerate")
     public ApiResponse<SceneScriptResponse> regenerateSceneScript(@PathVariable String projectId, @PathVariable String sceneId) {
         return ApiResponse.ok(sceneGenerationService.regenerateSceneScript(projectId, sceneId));
+    }
+
+    @GetMapping("/scenes/{sceneId}/stream")
+    public SseEmitter streamScenePreview(@PathVariable String projectId, @PathVariable String sceneId) {
+        return sceneGenerationService.streamScenePreview(projectId, sceneId);
     }
 }

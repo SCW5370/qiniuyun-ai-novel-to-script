@@ -11,6 +11,8 @@ public interface OutlineSceneMapper {
 
     int insertBatch(@Param("scenes") List<OutlineScene> scenes);
 
+    int updateSeqNo(@Param("id") Long id, @Param("seqNo") Integer seqNo);
+
     List<OutlineScene> findByProjectIdOrderBySeqNoAsc(@Param("projectId") String projectId);
 
     Optional<OutlineScene> findByProjectIdAndSceneId(@Param("projectId") String projectId, @Param("sceneId") String sceneId);

@@ -23,12 +23,24 @@
         </foreach>
     </insert>
 
+    <select id="findMaxChapterNoByProjectId" resultType="java.lang.Integer">
+        select max(chapter_no)
+        from source_chapters
+        where project_id = #{projectId}
+    </select>
+
     <select id="findByProjectIdOrderByChapterNoAsc" resultMap="SourceChapterResultMap">
         select id, project_id, chapter_no, title, raw_text, clean_text, summary, created_at
         from source_chapters
         where project_id = #{projectId}
         order by chapter_no asc
     </select>
+
+    <update id="updateChapterNo">
+        update source_chapters
+        set chapter_no = #{chapterNo}
+        where id = #{id}
+    </update>
 
     <update id="updateSummary">
         update source_chapters
