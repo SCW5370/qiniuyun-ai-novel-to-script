@@ -920,6 +920,19 @@ function App() {
       : connectionMode === "mock-only"
         ? "Mock 回退"
         : "连接失败";
+  const disconnectedPanelLabel = connectionMode === "mock-only" ? "Mock 回退" : "连接失败";
+  const chapterPanelFallbackMessage =
+    connectionMode === "mock-only"
+      ? "当前处于 mock 回退模式，连接到真实项目后会自动切换并显示章节列表。"
+      : "当前无法连接真实项目，章节列表暂不可用。";
+  const assetPanelFallbackMessage =
+    connectionMode === "mock-only"
+      ? "当前处于 mock 回退模式，连接到真实项目后会自动切换并显示角色与地点资产。"
+      : "当前无法连接真实项目，角色与地点资产暂不可用。";
+  const eventPanelFallbackMessage =
+    connectionMode === "mock-only"
+      ? "当前处于 mock 回退模式，连接到真实项目后会自动切换并显示故事事件时间线。"
+      : "当前无法连接真实项目，故事事件时间线暂不可用。";
   const displayProgress =
     progressSourceMode === "real" && progressStreamValue != null ? progressStreamValue : project.progress;
   const activePhaseLabel =
@@ -1181,7 +1194,7 @@ function App() {
           <div className="panel-header">
             <h2>章节原文</h2>
             <div className="panel-header-actions">
-              <span>{connectionMode === "connected" ? `${chapters.length} chapters` : "等待真实接口"}</span>
+              <span>{connectionMode === "connected" ? `${chapters.length} chapters` : disconnectedPanelLabel}</span>
               <button
                 className="ghost-button"
                 type="button"
@@ -1219,7 +1232,7 @@ function App() {
             )
           ) : (
             <div className="empty-state empty-state-compact">
-              当前仍使用 mock 场景工作台。A 线章节接口接通后，这里会自动显示真实章节列表。
+              {chapterPanelFallbackMessage}
             </div>
           )}
         </section>
@@ -1254,11 +1267,11 @@ function App() {
         <section className="panel asset-panel">
           <div className="panel-header">
             <h2>角色与地点</h2>
-            <span>{connectionMode === "connected" ? `${storyEntities.length} assets` : "等待真实接口"}</span>
+            <span>{connectionMode === "connected" ? `${storyEntities.length} assets` : disconnectedPanelLabel}</span>
           </div>
           {connectionMode !== "connected" ? (
             <div className="empty-state empty-state-compact">
-              当前仍使用 mock 场景工作台。A 线实体接口接通后，这里会显示真实角色与地点资产。
+              {assetPanelFallbackMessage}
             </div>
           ) : storyAssetsMessage ? (
             <div className="empty-state empty-state-compact">{storyAssetsMessage}</div>
@@ -1292,11 +1305,11 @@ function App() {
         <section className="panel event-panel">
           <div className="panel-header">
             <h2>故事事件</h2>
-            <span>{connectionMode === "connected" ? `${storyEvents.length} events` : "等待真实接口"}</span>
+            <span>{connectionMode === "connected" ? `${storyEvents.length} events` : disconnectedPanelLabel}</span>
           </div>
           {connectionMode !== "connected" ? (
             <div className="empty-state empty-state-compact">
-              当前仍使用 mock 场景工作台。A 线故事事件接口接通后，这里会显示真实事件时间线。
+              {eventPanelFallbackMessage}
             </div>
           ) : storyEventsMessage ? (
             <div className="empty-state empty-state-compact">{storyEventsMessage}</div>
