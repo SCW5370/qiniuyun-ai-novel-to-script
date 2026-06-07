@@ -929,6 +929,12 @@ function App() {
     analysisResult?.generationMode == null
       ? ""
       : analysisModeLabels[analysisResult.generationMode] ?? analysisResult.generationMode;
+  const selectedSceneIndex = outlineScenes.findIndex((scene) => scene.sceneId === selectedSceneId);
+  const previousSceneId = selectedSceneIndex > 0 ? outlineScenes[selectedSceneIndex - 1]?.sceneId ?? "" : "";
+  const nextSceneId =
+    selectedSceneIndex >= 0 && selectedSceneIndex < outlineScenes.length - 1
+      ? outlineScenes[selectedSceneIndex + 1]?.sceneId ?? ""
+      : "";
   const projectCompleted = project.status === "COMPLETED";
   const selectedSceneUsesFallback = sceneUsesFallback(sceneDetail);
   const completionMessage = projectCompleted
@@ -1361,6 +1367,25 @@ function App() {
           <div className="panel-header">
             <h2>Scene 详情</h2>
             <div className="panel-header-actions">
+              <span className="inline-pill">
+                {selectedSceneIndex >= 0 ? `${selectedSceneIndex + 1} / ${outlineScenes.length}` : "未选中"}
+              </span>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={!previousSceneId}
+                onClick={() => setSelectedSceneId(previousSceneId)}
+              >
+                上一场
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={!nextSceneId}
+                onClick={() => setSelectedSceneId(nextSceneId)}
+              >
+                下一场
+              </button>
               <span>{sceneDetail?.validationStatus ?? "未选中"}</span>
               <button
                 className="ghost-button"
