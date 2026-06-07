@@ -62,6 +62,10 @@ POST http://localhost:8080/api/projects/{{projectId}}/chapters/summarize
 # aiSuccess=true 表示 AI 抽取成功；fallbackUsed=true 表示 AI 失败后使用了规则兜底。
 POST http://localhost:8080/api/projects/{{projectId}}/analyze
 
+### 5-可选. 增量分析新增章节
+# 先执行追加章节请求，再执行本请求；它只处理尚未生成 story_events 的新增章节。
+POST http://localhost:8080/api/projects/{{projectId}}/analyze/incremental
+
 ### 6. 查询角色和地点
 GET http://localhost:8080/api/projects/{{projectId}}/entities
 

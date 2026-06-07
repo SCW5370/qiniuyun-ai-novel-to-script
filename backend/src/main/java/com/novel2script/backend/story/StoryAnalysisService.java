@@ -103,6 +103,11 @@ public class StoryAnalysisService {
         return projectOperationLock.execute(projectId, () -> analyzeLocked(projectId));
     }
 
+    @Transactional
+    public StoryAnalysisResponse analyzeIncremental(String projectId) {
+        return projectOperationLock.execute(projectId, () -> analyzeIncrementalLocked(projectId));
+    }
+
     private StoryAnalysisResponse analyzeLocked(String projectId) {
         long startedAt = System.currentTimeMillis();
         log.info("开始故事资产分析: projectId={}", projectId);
@@ -157,6 +162,74 @@ public class StoryAnalysisService {
         );
     }
 
+    private StoryAnalysisResponse analyzeIncrementalLocked(String projectId) {
+        long startedAt = System.currentTimeMillis();
+        log.info("开始增量故事资产分析: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "story_analysis_incremental", "entity_extracting", 40, "开始执行新增章节故事资产分析");
+        projectService.getProjectEntity(projectId);
+
+        List<SourceChapter> chapters = sourceChapterMapper.findByProjectIdOrderByChapterNoAsc(projectId);
+        if (chapters.isEmpty()) {
+            throw new IllegalArgumentException("请先提交小说文本并完成章节切分");
+        }
+
+        List<StoryEvent> existingEvents = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
+        Set<Long> analyzedChapterIds = existingEvents.stream()
+                .map(StoryEvent::getChapterId)
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+        List<SourceChapter> pendingChapters = chapters.stream()
+                .filter(chapter -> !analyzedChapterIds.contains(chapter.getId()))
+                .toList();
+
+        if (pendingChapters.isEmpty()) {
+            progressEventPublisher.jobCompleted(projectId, "entity_ready", 45, false, "没有发现待增量分析的新章节");
+            return new StoryAnalysisResponse(
+                    projectId,
+                    listEntities(projectId),
+                    listEvents(projectId),
+                    "INCREMENTAL_NONE",
+                    true,
+                    false,
+                    "没有发现待增量分析的新章节"
+            );
+        }
+
+        AssetBuildResult buildResult = buildIncrementalStoryAssets(projectId, pendingChapters);
+        IncrementalMergeResult mergeResult = mergeIncrementalAssets(projectId, buildResult.assets(), existingEvents);
+
+        projectService.updateStatus(projectId, ProjectStatus.ENTITY_READY);
+        progressEventPublisher.jobCompleted(
+                projectId,
+                "entity_ready",
+                45,
+                false,
+                "增量故事资产分析完成，新增实体 " + mergeResult.insertedEntityCount() + " 个，合并实体 "
+                        + mergeResult.updatedEntityCount() + " 个，新增事件 " + mergeResult.insertedEventCount() + " 个"
+        );
+        log.info(
+                "增量故事资产分析完成: projectId={}, mode={}, aiSuccess={}, pendingChapters={}, insertedEntities={}, updatedEntities={}, insertedEvents={}, elapsedMs={}",
+                projectId,
+                buildResult.generationMode(),
+                buildResult.aiSuccess(),
+                pendingChapters.size(),
+                mergeResult.insertedEntityCount(),
+                mergeResult.updatedEntityCount(),
+                mergeResult.insertedEventCount(),
+                System.currentTimeMillis() - startedAt
+        );
+
+        return new StoryAnalysisResponse(
+                projectId,
+                listEntities(projectId),
+                listEvents(projectId),
+                buildResult.generationMode(),
+                buildResult.aiSuccess(),
+                buildResult.fallbackUsed(),
+                buildResult.message() + "；新增章节 " + pendingChapters.size()
+                        + " 章，新增事件 " + mergeResult.insertedEventCount() + " 个"
+        );
+    }
+
     private AssetBuildResult buildStoryAssets(String projectId, List<SourceChapter> chapters) {
         try {
             return new AssetBuildResult(
@@ -177,6 +250,187 @@ public class StoryAnalysisService {
                     true,
                     "AI 抽取失败，已使用规则兜底生成故事资产：" + rootCauseMessage(ex)
             );
+        }
+    }
+
+    private AssetBuildResult buildIncrementalStoryAssets(String projectId, List<SourceChapter> pendingChapters) {
+        try {
+            return new AssetBuildResult(
+                    aiStoryAssetExtractor.extract(projectId, pendingChapters),
+                    "INCREMENTAL_AI",
+                    true,
+                    false,
+                    "新增章节故事资产由 AI 抽取生成"
+            );
+        } catch (Exception ex) {
+            log.warn("AI 增量故事资产抽取失败，切换规则兜底: projectId={}, reason={}", projectId, rootCauseMessage(ex));
+            progressEventPublisher.phaseChanged(projectId, "entity_extracting", 42, "AI 增量故事资产抽取失败，已切换规则兜底");
+            return new AssetBuildResult(
+                    new AiStoryAssetExtractor.Result(buildEntities(projectId, pendingChapters), buildEvents(projectId, pendingChapters)),
+                    "INCREMENTAL_FALLBACK",
+                    false,
+                    true,
+                    "AI 增量抽取失败，已使用规则兜底生成新增章节故事资产：" + rootCauseMessage(ex)
+            );
+        }
+    }
+
+    private IncrementalMergeResult mergeIncrementalAssets(
+            String projectId,
+            AiStoryAssetExtractor.Result incrementalAssets,
+            List<StoryEvent> existingEvents
+    ) {
+        List<StoryEntity> existingEntities = storyEntityMapper.findByProjectId(projectId);
+        Map<String, StoryEntity> entityIndex = buildEntityIndex(existingEntities);
+        List<StoryEntity> entitiesToInsert = new ArrayList<>();
+        List<StoryEntity> entitiesToUpdate = new ArrayList<>();
+        int nextCharacterSeq = nextEntitySequence(existingEntities, StoryEntityType.CHARACTER);
+        int nextLocationSeq = nextEntitySequence(existingEntities, StoryEntityType.LOCATION);
+
+        for (StoryEntity incoming : incrementalAssets.entities()) {
+            StoryEntity matched = findMatchedEntity(entityIndex, incoming);
+            if (matched == null) {
+                if (incoming.getEntityType() == StoryEntityType.LOCATION) {
+                    incoming.setEntityId("L" + String.format(Locale.ROOT, "%03d", nextLocationSeq++));
+                } else {
+                    incoming.setEntityId("C" + String.format(Locale.ROOT, "%03d", nextCharacterSeq++));
+                }
+                entitiesToInsert.add(incoming);
+                indexEntity(entityIndex, incoming);
+            } else {
+                mergeEntity(matched, incoming);
+                entitiesToUpdate.add(matched);
+                indexEntity(entityIndex, matched);
+            }
+        }
+
+        if (!entitiesToInsert.isEmpty()) {
+            storyEntityMapper.insertBatch(entitiesToInsert);
+        }
+        for (StoryEntity entity : entitiesToUpdate) {
+            storyEntityMapper.updateMergedEntity(entity);
+        }
+
+        List<StoryEvent> eventsToInsert = normalizeIncrementalEvents(projectId, incrementalAssets.events(), existingEvents);
+        if (!eventsToInsert.isEmpty()) {
+            storyEventMapper.insertBatch(eventsToInsert);
+        }
+
+        return new IncrementalMergeResult(entitiesToInsert.size(), entitiesToUpdate.size(), eventsToInsert.size());
+    }
+
+    private Map<String, StoryEntity> buildEntityIndex(List<StoryEntity> entities) {
+        Map<String, StoryEntity> index = new LinkedHashMap<>();
+        for (StoryEntity entity : entities) {
+            indexEntity(index, entity);
+        }
+        return index;
+    }
+
+    private void indexEntity(Map<String, StoryEntity> index, StoryEntity entity) {
+        index.put(entityMatchKey(entity.getEntityType(), entity.getCanonicalName()), entity);
+        for (String alias : readStringList(entity.getAliasesJson())) {
+            index.put(entityMatchKey(entity.getEntityType(), alias), entity);
+        }
+    }
+
+    private StoryEntity findMatchedEntity(Map<String, StoryEntity> entityIndex, StoryEntity incoming) {
+        StoryEntity matched = entityIndex.get(entityMatchKey(incoming.getEntityType(), incoming.getCanonicalName()));
+        if (matched != null) {
+            return matched;
+        }
+        for (String alias : readStringList(incoming.getAliasesJson())) {
+            matched = entityIndex.get(entityMatchKey(incoming.getEntityType(), alias));
+            if (matched != null) {
+                return matched;
+            }
+        }
+        return null;
+    }
+
+    private void mergeEntity(StoryEntity target, StoryEntity incoming) {
+        target.setAliasesJson(toJson(mergeStringLists(
+                readStringList(target.getAliasesJson()),
+                readStringList(incoming.getAliasesJson())
+        )));
+        target.setSourceRefsJson(toJson(mergeStringLists(
+                readStringList(target.getSourceRefsJson()),
+                readStringList(incoming.getSourceRefsJson())
+        )));
+        if (shouldAppendProfile(target.getProfile(), incoming.getProfile())) {
+            if (target.getProfile() == null || target.getProfile().isBlank()) {
+                target.setProfile(incoming.getProfile());
+            } else {
+                target.setProfile(target.getProfile() + "\n新增章节补充：" + incoming.getProfile());
+            }
+        }
+    }
+
+    private boolean shouldAppendProfile(String currentProfile, String incomingProfile) {
+        if (incomingProfile == null || incomingProfile.isBlank() || "暂无说明".equals(incomingProfile)) {
+            return false;
+        }
+        if (currentProfile == null || currentProfile.isBlank()) {
+            return true;
+        }
+        return !currentProfile.contains(incomingProfile);
+    }
+
+    private List<String> mergeStringLists(List<String> first, List<String> second) {
+        Set<String> values = new LinkedHashSet<>();
+        values.addAll(first);
+        values.addAll(second);
+        return List.copyOf(values);
+    }
+
+    private List<StoryEvent> normalizeIncrementalEvents(String projectId, List<StoryEvent> incomingEvents, List<StoryEvent> existingEvents) {
+        int nextEventSeq = nextEventSequence(existingEvents);
+        int nextEventOrder = existingEvents.stream()
+                .map(StoryEvent::getEventOrder)
+                .filter(order -> order != null)
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+        List<StoryEvent> events = new ArrayList<>();
+        for (StoryEvent incoming : incomingEvents) {
+            incoming.setProjectId(projectId);
+            incoming.setEventId("E" + String.format(Locale.ROOT, "%03d", nextEventSeq++));
+            incoming.setEventOrder(nextEventOrder++);
+            events.add(incoming);
+        }
+        return events;
+    }
+
+    private String entityMatchKey(StoryEntityType type, String name) {
+        String normalizedName = name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
+        return type.name() + ":" + normalizedName;
+    }
+
+    private int nextEntitySequence(List<StoryEntity> entities, StoryEntityType type) {
+        String prefix = type == StoryEntityType.LOCATION ? "L" : "C";
+        return entities.stream()
+                .filter(entity -> entity.getEntityType() == type)
+                .map(StoryEntity::getEntityId)
+                .map(entityId -> parseSequence(entityId, prefix))
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+    }
+
+    private int nextEventSequence(List<StoryEvent> events) {
+        return events.stream()
+                .map(StoryEvent::getEventId)
+                .map(eventId -> parseSequence(eventId, "E"))
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+    }
+
+    private int parseSequence(String value, String prefix) {
+        if (value == null || !value.startsWith(prefix)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(value.substring(prefix.length()));
+        } catch (NumberFormatException ex) {
+            return 0;
         }
     }
 
@@ -398,6 +652,13 @@ public class StoryAnalysisService {
             Boolean aiSuccess,
             Boolean fallbackUsed,
             String message
+    ) {
+    }
+
+    private record IncrementalMergeResult(
+            int insertedEntityCount,
+            int updatedEntityCount,
+            int insertedEventCount
     ) {
     }
 }

@@ -361,10 +361,10 @@ POST /api/projects/{projectId}/analyze
 处理规则：
 
 - 该接口依赖项目已经完成章节切分。
-- 首版使用规则抽取角色、地点和章节事件，后续可替换为 LLM 抽取。
-- 执行时会删除该项目旧的实体和事件分析结果，并写入新的结果。
+- 当前实现为 AI 优先、规则兜底。
+- 执行时会删除该项目旧的实体、事件、场景大纲和 Scene 剧本，并写入新的故事资产结果。
 - 成功后项目状态更新为 `ENTITY_READY`。
-- 当前实现为 AI 优先、规则兜底；AI 不可用时仍返回基础结构，避免联调中断。
+- AI 不可用时仍返回基础结构，避免联调中断。
 - 响应中的 `aiSuccess`、`fallbackUsed`、`generationMode`、`message` 用于前端展示本次分析是否由 AI 完成。
 
 成功响应：
@@ -409,6 +409,35 @@ POST /api/projects/{projectId}/analyze
   }
 }
 ```
+
+## 增量分析新增章节
+
+```http
+POST /api/projects/{projectId}/analyze/incremental
+```
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `projectId` | string | 项目 ID，格式 `proj_YYYYMMDD_xxxxxx` |
+
+处理规则：
+
+- 该接口用于章节追加后的增量分析。
+- 后端会找出尚未生成 `story_events` 的章节，只分析这些新增章节。
+- 旧实体、旧事件、旧场景大纲和旧 Scene 剧本不会被删除。
+- 新实体会按实体类型、名称和别名尝试合并到已有实体；无法匹配时才分配新的 `C###` 或 `L###`。
+- 新事件会从当前最大 `eventOrder` 和最大 `E###` 后继续追加。
+- 如果没有发现待分析的新章节，会返回现有实体和事件，并在 `message` 中说明。
+
+成功响应结构与“分析故事中间资产”一致。`generationMode` 可能为：
+
+| 值 | 说明 |
+| --- | --- |
+| `INCREMENTAL_AI` | 新增章节由 AI 抽取 |
+| `INCREMENTAL_FALLBACK` | AI 失败后使用规则兜底 |
+| `INCREMENTAL_NONE` | 没有待增量分析的新章节 |
 
 ## 查询故事实体
 

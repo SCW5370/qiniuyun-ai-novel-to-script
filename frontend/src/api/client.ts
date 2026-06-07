@@ -307,6 +307,14 @@ export async function analyzeStoryAssets(projectId: string) {
   return adaptStoryAnalysis(data);
 }
 
+export async function analyzeStoryAssetsIncremental(projectId: string) {
+  const data = await requestJson<BackendStoryAnalysisResponse>(
+    `/projects/${projectId}/analyze/incremental`,
+    buildJsonPostOptions()
+  );
+  return adaptStoryAnalysis(data);
+}
+
 export async function getStoryEntities(projectId: string) {
   const data = await requestJson<BackendStoryEntityResponse[]>(`/projects/${projectId}/entities`);
   return data.map(adaptStoryEntity);

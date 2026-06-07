@@ -200,6 +200,7 @@ Rules:
 - `POST /api/projects/{projectId}/source/upload`
 - `POST /api/projects/{projectId}/chapters/append`
 - `POST /api/projects/{projectId}/analyze`
+- `POST /api/projects/{projectId}/analyze/incremental`
 - `GET /api/projects/{projectId}`
 - `GET /api/projects/{projectId}/chapters`
 - `POST /api/projects/{projectId}/chapters/summarize`
@@ -215,8 +216,8 @@ Rules:
 
 ## Current Integration Status
 
-- 已在 `main` 真实接入：`POST /api/projects`、`GET /api/projects`、`GET /api/projects/{projectId}`、`POST /api/projects/{projectId}/source`、`POST /api/projects/{projectId}/source/upload`、`POST /api/projects/{projectId}/chapters/append`、`GET /api/projects/{projectId}/chapters`、`POST /api/projects/{projectId}/chapters/summarize`、`POST /api/projects/{projectId}/analyze`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`、`GET /api/projects/{projectId}/outline`、`GET /api/projects/{projectId}/scenes`、`GET /api/projects/{projectId}/scenes/{sceneId}`、`POST /api/projects/{projectId}/scenes/{sceneId}/regenerate`、`POST /api/projects/{projectId}/validate`、`GET /api/projects/{projectId}/export?format=yaml`、`GET /api/projects/{projectId}/events`
-- 已在 `main` 前端接入：项目创建、项目列表、正文提交、文件上传、章节追加、章节列表、章节摘要、故事资产分析、角色地点面板、故事事件面板、场景大纲、Scene 详情、Scene 快捷切换、Scene 重新生成、项目校验、YAML 导出、一次性进度状态读取
+- 已在 `main` 真实接入：`POST /api/projects`、`GET /api/projects`、`GET /api/projects/{projectId}`、`POST /api/projects/{projectId}/source`、`POST /api/projects/{projectId}/source/upload`、`POST /api/projects/{projectId}/chapters/append`、`GET /api/projects/{projectId}/chapters`、`POST /api/projects/{projectId}/chapters/summarize`、`POST /api/projects/{projectId}/analyze`、`POST /api/projects/{projectId}/analyze/incremental`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`、`GET /api/projects/{projectId}/outline`、`GET /api/projects/{projectId}/scenes`、`GET /api/projects/{projectId}/scenes/{sceneId}`、`POST /api/projects/{projectId}/scenes/{sceneId}/regenerate`、`POST /api/projects/{projectId}/validate`、`GET /api/projects/{projectId}/export?format=yaml`、`GET /api/projects/{projectId}/events`
+- 已在 `main` 前端接入：项目创建、项目列表、正文提交、文件上传、章节追加、章节列表、章节摘要、故事资产全量分析、故事资产增量分析、角色地点面板、故事事件面板、场景大纲、Scene 详情、Scene 快捷切换、Scene 重新生成、项目校验、YAML 导出、一次性进度状态读取
 - 当前保留的前端策略：真实接口优先，失败时回退 mock，避免联调期阻塞演示
 - 当前 `GET /api/projects/{projectId}/events` 只是 SSE 形式的一次性状态快照：连接后发送当前阶段和完成态事件，然后关闭连接
 - 尚未实现真正长任务实时推送；实时 SSE 进度流作为后续独立 PR 实现，详见 `docs/sse-events.md`

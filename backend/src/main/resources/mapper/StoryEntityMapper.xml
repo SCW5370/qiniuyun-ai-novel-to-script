@@ -35,6 +35,15 @@
         </foreach>
     </insert>
 
+    <update id="updateMergedEntity">
+        update story_entities
+        set aliases_json = #{entity.aliasesJson},
+            profile = #{entity.profile},
+            source_refs_json = #{entity.sourceRefsJson}
+        where project_id = #{entity.projectId}
+          and entity_id = #{entity.entityId}
+    </update>
+
     <select id="findByProjectId" resultMap="StoryEntityResultMap">
         select id, project_id, entity_id, entity_type, canonical_name, aliases_json, profile,
                source_refs_json, created_at, updated_at

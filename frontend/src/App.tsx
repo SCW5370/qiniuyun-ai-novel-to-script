@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   analyzeStoryAssets,
+  analyzeStoryAssetsIncremental,
   appendProjectSource,
   appendProjectSourceFile,
   createProject,
@@ -66,7 +67,10 @@ const phaseKeyToLabel: Record<string, string> = {
 
 const analysisModeLabels: Record<string, string> = {
   AI: "AI 抽取",
-  FALLBACK: "规则兜底"
+  FALLBACK: "规则兜底",
+  INCREMENTAL_AI: "增量 AI 抽取",
+  INCREMENTAL_FALLBACK: "增量规则兜底",
+  INCREMENTAL_NONE: "无新增章节"
 };
 
 const mockOutlineScenes = outlineData as OutlineSceneViewModel[];
@@ -423,7 +427,7 @@ function App() {
   async function completeSourceAppend(nextChapters: ChapterViewModel[], appendedLabel: string) {
     setChapters(nextChapters);
     setSourceSubmitMessage(
-      `${appendedLabel}已追加到当前项目，当前共 ${nextChapters.length} 章。旧场景和剧本已保留；新增章节的增量分析与增量场景生成将在后续功能中接入。`
+      `${appendedLabel}已追加到当前项目，当前共 ${nextChapters.length} 章。旧场景和剧本已保留；可点击“增量分析”处理新增章节。`
     );
     await loadProjectDetail(project.projectId);
     await refreshProjectList();
@@ -562,6 +566,38 @@ function App() {
       await runStoryAnalysis(project.projectId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "无法执行故事资产分析";
+      setAnalysisStatus("error");
+      setAnalysisMessage(message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function handleAnalyzeStoryAssetsIncremental() {
+    if (connectionMode !== "connected" || isAnalyzing) {
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysisResult(null);
+    setAnalysisMessage("");
+    setAnalysisStatus("");
+
+    try {
+      const result = await analyzeStoryAssetsIncremental(project.projectId);
+      setAnalysisResult(result);
+      setStoryEntities(result.entities);
+      setStoryEvents(result.events);
+      setStoryAssetsMessage("");
+      setStoryEventsMessage("");
+      setAnalysisStatus(result.fallbackUsed ? "warning" : "success");
+      setAnalysisMessage(
+        `${result.message}，当前共有 ${result.entityCount} 个实体和 ${result.eventCount} 个事件。`
+      );
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法执行增量故事资产分析";
       setAnalysisStatus("error");
       setAnalysisMessage(message);
     } finally {
@@ -1277,7 +1313,15 @@ function App() {
                 disabled={connectionMode !== "connected" || isProjectOperationBusy}
                 onClick={() => void handleAnalyzeStoryAssets()}
               >
-                {isAnalyzing ? "分析中..." : "执行分析"}
+                {isAnalyzing ? "分析中..." : "执行全量分析"}
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy}
+                onClick={() => void handleAnalyzeStoryAssetsIncremental()}
+              >
+                增量分析
               </button>
             </div>
           </div>
