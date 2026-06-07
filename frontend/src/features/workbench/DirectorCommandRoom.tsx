@@ -119,10 +119,33 @@ export function DirectorCommandRoom() {
         </div>
       </section>
 
-      {state.isProjectOperationBusy ? (
-        <div className="live-operation-strip">
+      {state.workflowNotice || state.isProjectOperationBusy ? (
+        <div
+          className={
+            state.workflowNotice
+              ? `live-operation-strip live-operation-strip-${state.workflowNotice.tone}`
+              : "live-operation-strip"
+          }
+        >
           <Radio size={16} />
-          <span>{messages.progressStreamMessage || "制作任务正在执行，写操作已暂时锁定。"}</span>
+          <div className="live-operation-copy">
+            <strong>{state.workflowNotice?.title ?? "制作任务正在执行"}</strong>
+            <span>
+              {state.workflowNotice?.detail ||
+                messages.progressStreamMessage ||
+                "制作任务正在执行，写操作已暂时锁定。"}
+            </span>
+            {state.workflowNotice?.jobId ? <small>Job {state.workflowNotice.jobId}</small> : null}
+          </div>
+          {state.workflowNotice?.retryAction ? (
+            <Button
+              icon={<RefreshCcw size={16} />}
+              onClick={() => void actions.retryWorkflowNotice()}
+              disabled={state.connectionMode !== "connected" || state.isProjectOperationBusy}
+            >
+              {derived.workflowNoticeRetryLabel}
+            </Button>
+          ) : null}
         </div>
       ) : null}
 

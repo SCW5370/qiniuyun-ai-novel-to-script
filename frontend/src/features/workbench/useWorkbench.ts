@@ -32,6 +32,7 @@ import type {
   StoryEventViewModel,
   ValidationItemViewModel,
   ValidationReportViewModel,
+  WorkflowJobViewModel,
   WorkbenchConnectionMode
 } from "../../api/types";
 import { appConfig } from "../../config";
@@ -67,6 +68,37 @@ const mockProject = {
   createdAt: projectData.createdAt,
   updatedAt: projectData.updatedAt
 } as ProjectViewModel;
+
+type WorkflowNoticeTone = "info" | "running" | "success" | "danger";
+
+type WorkflowNotice = {
+  jobId: string;
+  jobType: string;
+  step: "submitted" | "analyzing" | "generating" | "refreshing" | "completed" | "failed";
+  title: string;
+  detail: string;
+  tone: WorkflowNoticeTone;
+  retryAction: "analyze" | "outline" | null;
+};
+
+function workflowJobTypeLabel(jobType: string) {
+  if (jobType.includes("OUTLINE")) return "场景生成";
+  if (jobType.includes("ANALYZE")) return "故事分析";
+  return "制作任务";
+}
+
+function createSubmittedWorkflowNotice(job: WorkflowJobViewModel, retryAction: WorkflowNotice["retryAction"]): WorkflowNotice {
+  const label = workflowJobTypeLabel(job.jobType);
+  return {
+    jobId: job.jobId,
+    jobType: job.jobType,
+    step: "submitted",
+    title: "任务已提交",
+    detail: `${label}已进入 MQ 队列，完成后自动刷新工作台。`,
+    tone: "info",
+    retryAction
+  };
+}
 
 export function useWorkbench() {
   const activeView = useWorkbenchStore((state) => state.activeView);
@@ -113,6 +145,7 @@ export function useWorkbench() {
   const [progressStreamPhase, setProgressStreamPhase] = useState("");
   const [progressStreamValue, setProgressStreamValue] = useState<number | null>(null);
   const [progressSourceMode, setProgressSourceMode] = useState<"real" | "static">("static");
+  const [workflowNotice, setWorkflowNotice] = useState<WorkflowNotice | null>(null);
   const [analysisResult, setAnalysisResult] = useState<StoryAnalysisViewModel | null>(null);
   const [analysisMessage, setAnalysisMessage] = useState("");
   const [analysisStatus, setAnalysisStatus] = useState<"success" | "warning" | "error" | "">("");
@@ -142,8 +175,36 @@ export function useWorkbench() {
     isExportingYaml;
 
   function switchProject(nextProjectId: string) {
+    setWorkflowNotice(null);
     setProjectId(nextProjectId);
     window.history.replaceState(null, "", `?projectId=${encodeURIComponent(nextProjectId)}`);
+  }
+
+  function markWorkflowSubmitted(job: WorkflowJobViewModel, retryAction: WorkflowNotice["retryAction"]) {
+    setWorkflowNotice(createSubmittedWorkflowNotice(job, retryAction));
+  }
+
+  function markWorkflowFailed(detail: string, retryAction: WorkflowNotice["retryAction"]) {
+    setWorkflowNotice((current) => ({
+      jobId: current?.jobId ?? "",
+      jobType: current?.jobType ?? "",
+      step: "failed",
+      title: "任务失败，可重试",
+      detail,
+      tone: "danger",
+      retryAction
+    }));
+  }
+
+  async function retryWorkflowNotice() {
+    if (!workflowNotice?.retryAction || connectionMode !== "connected" || isProjectOperationBusy) return;
+
+    if (workflowNotice.retryAction === "outline") {
+      await handleGenerateIncrementalOutline();
+      return;
+    }
+
+    await handleAnalyzeStoryAssets();
   }
 
   function applyProgressEvent(progressEvent: ProgressStreamEvent) {
@@ -165,6 +226,54 @@ export function useWorkbench() {
       setProgressStreamPhase("scene_generating");
     } else if (event === "job.completed") {
       setProgressStreamPhase("completed");
+    }
+
+    if (event === "job.started" || event === "phase.changed") {
+      const nextPhase = data.phase ?? progressStreamPhase;
+      const isSceneWork =
+        nextPhase.includes("outline") || nextPhase.includes("scene") || Boolean(data.jobType?.includes("OUTLINE"));
+      setWorkflowNotice((current) => ({
+        jobId: current?.jobId ?? data.sceneId ?? "",
+        jobType: data.jobType ?? current?.jobType ?? "",
+        step: isSceneWork ? "generating" : "analyzing",
+        title: isSceneWork ? "正在生成场景" : "正在分析",
+        detail: data.message ?? "MQ 消费端正在处理任务，完成后自动刷新工作台。",
+        tone: "running",
+        retryAction: isSceneWork ? "outline" : "analyze"
+      }));
+    } else if (event === "outline.ready" || event === "scene.done") {
+      setWorkflowNotice((current) => ({
+        jobId: current?.jobId ?? data.sceneId ?? "",
+        jobType: data.jobType ?? current?.jobType ?? "",
+        step: "refreshing",
+        title: "完成后自动刷新",
+        detail: data.message ?? "后台任务已产出结果，正在刷新故事资产与场景。",
+        tone: "success",
+        retryAction: null
+      }));
+    } else if (event === "job.completed") {
+      setWorkflowNotice((current) => ({
+        jobId: current?.jobId ?? "",
+        jobType: data.jobType ?? current?.jobType ?? "",
+        step: "completed",
+        title: "完成后自动刷新",
+        detail: data.message ?? "任务已完成，工作台数据已自动同步。",
+        tone: "success",
+        retryAction: null
+      }));
+    } else if (event === "job.failed") {
+      setWorkflowNotice((current) => ({
+        jobId: current?.jobId ?? "",
+        jobType: data.jobType ?? current?.jobType ?? "",
+        step: "failed",
+        title: "任务失败，可重试",
+        detail: data.message ?? "MQ 任务处理失败，请检查输入后重试。",
+        tone: "danger",
+        retryAction:
+          data.phase?.includes("outline") || data.phase?.includes("scene") || data.jobType?.includes("OUTLINE")
+            ? "outline"
+            : "analyze"
+      }));
     }
 
     setProgressSourceMode("real");
@@ -218,6 +327,19 @@ export function useWorkbench() {
   }
 
   async function refreshGeneratedAssets(targetProjectId: string) {
+    setWorkflowNotice((current) =>
+      current && current.step !== "failed"
+        ? {
+            ...current,
+            step: "refreshing",
+            title: "完成后自动刷新",
+            detail: "后台结果已返回，正在同步故事资产、场景大纲和项目状态。",
+            tone: "success",
+            retryAction: null
+          }
+        : current
+    );
+
     const [entities, events, scenes] = await Promise.all([
       getStoryEntities(targetProjectId),
       getStoryEvents(targetProjectId),
@@ -248,16 +370,27 @@ export function useWorkbench() {
     const { events, scenes } = await refreshGeneratedAssets(targetProjectId);
     if (events.length > 0 && scenes.length === 0) {
       const job = await generateProjectOutline(targetProjectId);
+      markWorkflowSubmitted(job, "outline");
       setOutlineMessage(`场景大纲任务已提交到 MQ：${job.jobId}`);
     }
   }
 
   async function runStoryAnalysis(targetProjectId: string) {
     setAnalysisStatus("");
-    setAnalysisMessage("故事资产分析任务已提交到 MQ，后端正在后台处理...");
+    setWorkflowNotice({
+      jobId: "",
+      jobType: "ANALYZE_STORY",
+      step: "submitted",
+      title: "任务已提交",
+      detail: "正在向 MQ 投递故事分析任务。",
+      tone: "info",
+      retryAction: "analyze"
+    });
+    setAnalysisMessage("任务已提交，正在分析。完成后自动刷新工作台。");
     const job = await analyzeStoryAssets(targetProjectId);
+    markWorkflowSubmitted(job, "analyze");
     setAnalysisStatus("success");
-    setAnalysisMessage(`故事资产分析任务已提交：${job.jobId}`);
+    setAnalysisMessage(`任务已提交：${job.jobId}。正在分析，完成后自动刷新。`);
     await loadProjectDetail(targetProjectId);
     await refreshProjectList();
     return job;
@@ -289,6 +422,7 @@ export function useWorkbench() {
     } catch (analysisError) {
       setAnalysisStatus("error");
       setAnalysisMessage(analysisError instanceof Error ? analysisError.message : "自动故事分析失败");
+      markWorkflowFailed("正文已提交，但 MQ 分析任务提交失败，可重试。", "analyze");
       setSourceSubmitMessage("正文已提交，但 MQ 分析任务提交失败，可执行全量分析重试。");
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
@@ -414,7 +548,9 @@ export function useWorkbench() {
       await runStoryAnalysis(project.projectId);
     } catch (error) {
       setAnalysisStatus("error");
-      setAnalysisMessage(error instanceof Error ? error.message : "无法执行故事资产分析");
+      const message = error instanceof Error ? error.message : "无法执行故事资产分析";
+      setAnalysisMessage(`${message}。可重试。`);
+      markWorkflowFailed(`${message}。可重试。`, "analyze");
     } finally {
       setIsAnalyzing(false);
     }
@@ -430,13 +566,16 @@ export function useWorkbench() {
 
     try {
       const job = await analyzeStoryAssetsIncremental(project.projectId);
+      markWorkflowSubmitted(job, "analyze");
       setAnalysisStatus("success");
-      setAnalysisMessage(`增量故事资产分析任务已提交：${job.jobId}`);
+      setAnalysisMessage(`增量任务已提交：${job.jobId}。正在分析，完成后自动刷新。`);
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
     } catch (error) {
       setAnalysisStatus("error");
-      setAnalysisMessage(error instanceof Error ? error.message : "无法执行增量故事资产分析");
+      const message = error instanceof Error ? error.message : "无法执行增量故事资产分析";
+      setAnalysisMessage(`${message}。可重试。`);
+      markWorkflowFailed(`${message}。可重试。`, "analyze");
     } finally {
       setIsAnalyzing(false);
     }
@@ -449,11 +588,14 @@ export function useWorkbench() {
 
     try {
       const job = await generateProjectOutlineIncremental(project.projectId);
-      setOutlineMessage(`增量场景大纲任务已提交：${job.jobId}`);
+      markWorkflowSubmitted(job, "outline");
+      setOutlineMessage(`任务已提交：${job.jobId}。正在生成场景，完成后自动刷新。`);
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
     } catch (error) {
-      setOutlineMessage(error instanceof Error ? error.message : "无法生成增量场景大纲");
+      const message = error instanceof Error ? error.message : "无法生成增量场景大纲";
+      setOutlineMessage(`${message}。可重试。`);
+      markWorkflowFailed(`${message}。可重试。`, "outline");
     }
   }
 
@@ -944,7 +1086,13 @@ export function useWorkbench() {
       totalValidationCount:
         validationSourceMode === "real"
           ? validationReportData.items.length
-          : sceneDetail?.warnings.length ?? mockValidationReport.items.length
+          : sceneDetail?.warnings.length ?? mockValidationReport.items.length,
+      workflowNoticeRetryLabel:
+        workflowNotice?.retryAction === "outline"
+          ? "重试生成场景"
+          : workflowNotice?.retryAction === "analyze"
+            ? "重试分析"
+            : ""
     };
   }, [
     analysisResult,
@@ -962,6 +1110,7 @@ export function useWorkbench() {
     storyEvents,
     validationReportData,
     validationSourceMode,
+    workflowNotice,
     yamlSourceMode
   ]);
 
@@ -977,6 +1126,7 @@ export function useWorkbench() {
       handleExportYaml,
       handleGenerateIncrementalOutline,
       handleRegenerateScene,
+      retryWorkflowNotice,
       handleSearchProjects,
       handleStreamScenePreview,
       handleSubmitSourceText,
@@ -1042,6 +1192,7 @@ export function useWorkbench() {
       storyEntities,
       storyEvents,
       validationReportData,
+      workflowNotice,
       yamlPreviewContent
     }
   };

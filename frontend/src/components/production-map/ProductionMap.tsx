@@ -415,7 +415,18 @@ export function ProductionMap(props: ProductionMapProps) {
             selectedSceneId={props.selectedSceneId}
             setSelectedSceneId={props.setSelectedSceneId}
           />
-          <OrbitControls enablePan={false} enableZoom={false} autoRotate={false} />
+          <OrbitControls
+            autoRotate={false}
+            enableDamping
+            enablePan
+            enableRotate
+            enableZoom
+            maxDistance={11}
+            minDistance={3.4}
+            panSpeed={0.72}
+            rotateSpeed={0.62}
+            zoomSpeed={0.58}
+          />
         </Canvas>
       </div>
 
