@@ -20,10 +20,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class SceneGenerationService {
@@ -107,10 +111,72 @@ public class SceneGenerationService {
         return projectOperationLock.execute(projectId, () -> regenerateSceneScriptLocked(projectId, sceneId));
     }
 
+    public SseEmitter streamScenePreview(String projectId, String sceneId) {
+        SseEmitter emitter = new SseEmitter(120_000L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                SceneStreamContext context = projectOperationLock.execute(projectId, () -> buildSceneStreamContext(projectId, sceneId));
+                if (!sendStreamEvent(emitter, "started", Map.of(
+                        "projectId", projectId,
+                        "sceneId", sceneId,
+                        "message", "开始流式生成 Scene 预览"
+                ))) {
+                    return;
+                }
+
+                aiChatClient.streamText(
+                        "你是专业剧本写作助手。请按影视剧本风格输出，不要返回 JSON。",
+                        buildScenePreviewPrompt(context.project(), context.outlineScene(), context.entities(), context.events()),
+                        chunk -> {
+                            if (!sendStreamEvent(emitter, "chunk", Map.of(
+                                    "projectId", projectId,
+                                    "sceneId", sceneId,
+                                    "content", chunk
+                            ))) {
+                                throw new StreamClientDisconnectedException();
+                            }
+                        }
+                );
+
+                sendStreamEvent(emitter, "done", Map.of(
+                        "projectId", projectId,
+                        "sceneId", sceneId,
+                        "message", "Scene 预览流式生成完成"
+                ));
+                emitter.complete();
+            } catch (StreamClientDisconnectedException ex) {
+                completeQuietly(emitter);
+            } catch (Exception ex) {
+                sendStreamEvent(emitter, "failed", Map.of(
+                        "projectId", projectId,
+                        "sceneId", sceneId,
+                        "message", rootCauseMessage(ex)
+                ));
+                completeQuietly(emitter);
+            }
+        });
+        return emitter;
+    }
+
     private SceneScriptResponse regenerateSceneScriptLocked(String projectId, String sceneId) {
         projectService.getProjectEntity(projectId);
         sceneScriptMapper.deleteByProjectIdAndSceneId(projectId, sceneId);
         return toSceneScriptResponse(generateSceneScript(projectId, sceneId, true));
+    }
+
+    private SceneStreamContext buildSceneStreamContext(String projectId, String sceneId) {
+        Project project = projectService.getProjectEntity(projectId);
+        OutlineScene outlineScene = outlineSceneMapper.findByProjectIdAndSceneId(projectId, sceneId)
+                .orElseGet(() -> {
+                    List<OutlineScene> scenes = generateOutline(projectId);
+                    return scenes.stream()
+                            .filter(scene -> scene.getSceneId().equals(sceneId))
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalArgumentException("场景不存在: " + sceneId));
+                });
+        List<StoryEntity> entities = storyEntityMapper.findByProjectId(projectId);
+        List<StoryEvent> events = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
+        return new SceneStreamContext(project, outlineScene, entities, events);
     }
 
     private List<OutlineScene> generateOutline(String projectId) {
@@ -345,6 +411,54 @@ public class SceneGenerationService {
                 """.formatted(project.getTitle(), regenerating, toJson(outlineScene), toJson(entities), toJson(events));
     }
 
+    private String buildScenePreviewPrompt(Project project, OutlineScene outlineScene, List<StoryEntity> entities, List<StoryEvent> events) {
+        return """
+                请流式生成单个 Scene 级剧本预览。
+                项目标题：%s
+
+                输出格式：
+                场景标题：...
+                动作：
+                - ...
+                对白：
+                C001：...
+                C002：...
+
+                要求：
+                1. 使用中文影视剧本表达。
+                2. 动作描写 2 到 5 条，对白 1 到 6 条。
+                3. 对白角色优先使用角色 ID，不要新增未给出的角色 ID。
+                4. 这是流式预览，不需要输出 JSON，不需要 Markdown 代码块。
+
+                场景大纲：
+                %s
+
+                故事实体：
+                %s
+
+                故事事件：
+                %s
+                """.formatted(project.getTitle(), toJson(outlineScene), toJson(entities), toJson(events));
+    }
+
+    private boolean sendStreamEvent(SseEmitter emitter, String eventName, Map<String, Object> payload) {
+        try {
+            emitter.send(SseEmitter.event().name(eventName).data(payload));
+            return true;
+        } catch (IOException | IllegalStateException ex) {
+            completeQuietly(emitter);
+            return false;
+        }
+    }
+
+    private void completeQuietly(SseEmitter emitter) {
+        try {
+            emitter.complete();
+        } catch (IllegalStateException ignored) {
+            // 客户端已经断开时无需继续处理。
+        }
+    }
+
     public OutlineSceneResponse toOutlineResponse(OutlineScene scene) {
         return OutlineSceneResponse.from(
                 scene,
@@ -418,5 +532,16 @@ public class SceneGenerationService {
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("序列化场景数据失败", ex);
         }
+    }
+
+    private record SceneStreamContext(
+            Project project,
+            OutlineScene outlineScene,
+            List<StoryEntity> entities,
+            List<StoryEvent> events
+    ) {
+    }
+
+    private static final class StreamClientDisconnectedException extends RuntimeException {
     }
 }

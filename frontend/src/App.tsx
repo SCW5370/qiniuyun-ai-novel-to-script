@@ -192,6 +192,9 @@ function App() {
   const [isSummarizingChapters, setIsSummarizingChapters] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isRegeneratingScene, setIsRegeneratingScene] = useState(false);
+  const [isStreamingScene, setIsStreamingScene] = useState(false);
+  const [sceneStreamContent, setSceneStreamContent] = useState("");
+  const [sceneStreamMessage, setSceneStreamMessage] = useState("");
   const [isValidatingProject, setIsValidatingProject] = useState(false);
   const [isExportingYaml, setIsExportingYaml] = useState(false);
   const isProjectOperationBusy =
@@ -199,6 +202,7 @@ function App() {
     isSummarizingChapters ||
     isAnalyzing ||
     isRegeneratingScene ||
+    isStreamingScene ||
     isValidatingProject ||
     isExportingYaml;
   const canLoadGeneratedScenes =
@@ -506,6 +510,87 @@ function App() {
     }
   }
 
+  function handleStreamScenePreview() {
+    if (
+      connectionMode !== "connected" ||
+      outlineSourceMode !== "real" ||
+      !selectedSceneId ||
+      isProjectOperationBusy ||
+      isStreamingScene
+    ) {
+      return;
+    }
+
+    setIsStreamingScene(true);
+    setSceneStreamContent("");
+    setSceneStreamMessage("正在连接 AI 流式预览...");
+
+    const streamUrl = `${appConfig.apiBaseUrl}/projects/${encodeURIComponent(
+      project.projectId
+    )}/scenes/${encodeURIComponent(selectedSceneId)}/stream`;
+    const eventSource = new EventSource(streamUrl);
+    let closed = false;
+
+    function closeStream(message?: string) {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      eventSource.close();
+      setIsStreamingScene(false);
+      if (message) {
+        setSceneStreamMessage(message);
+      }
+    }
+
+    function readPayload(event: MessageEvent<string>) {
+      try {
+        return JSON.parse(event.data) as { content?: string; message?: string };
+      } catch {
+        closeStream("AI 流式预览返回数据格式异常。");
+        return null;
+      }
+    }
+
+    eventSource.addEventListener("started", (event) => {
+      const payload = readPayload(event as MessageEvent<string>);
+      if (!payload) {
+        return;
+      }
+      setSceneStreamMessage(payload.message ?? "AI 流式预览已开始。");
+    });
+
+    eventSource.addEventListener("chunk", (event) => {
+      const payload = readPayload(event as MessageEvent<string>);
+      if (!payload) {
+        return;
+      }
+      if (payload.content) {
+        setSceneStreamContent((current) => current + payload.content);
+      }
+    });
+
+    eventSource.addEventListener("done", (event) => {
+      const payload = readPayload(event as MessageEvent<string>);
+      if (!payload) {
+        return;
+      }
+      closeStream(payload.message ?? "Scene 预览流式生成完成。");
+    });
+
+    eventSource.addEventListener("failed", (event) => {
+      const payload = readPayload(event as MessageEvent<string>);
+      if (!payload) {
+        return;
+      }
+      closeStream(payload.message ?? "AI 流式预览失败。");
+    });
+
+    eventSource.onerror = () => {
+      closeStream("AI 流式预览连接已断开。");
+    };
+  }
+
   async function handleValidateProject() {
     if (connectionMode !== "connected" || outlineSourceMode !== "real" || isValidatingProject) {
       return;
@@ -798,6 +883,8 @@ function App() {
 
   useEffect(() => {
     const mockScene = mockSceneMap[selectedSceneId] ?? null;
+    setSceneStreamContent("");
+    setSceneStreamMessage("");
 
     if (!selectedSceneId) {
       setSceneDetail(null);
@@ -1392,7 +1479,7 @@ function App() {
               <button
                 className="ghost-button"
                 type="button"
-                disabled={!previousSceneId}
+                disabled={!previousSceneId || isProjectOperationBusy}
                 onClick={() => setSelectedSceneId(previousSceneId)}
               >
                 上一场
@@ -1400,7 +1487,7 @@ function App() {
               <button
                 className="ghost-button"
                 type="button"
-                disabled={!nextSceneId}
+                disabled={!nextSceneId || isProjectOperationBusy}
                 onClick={() => setSelectedSceneId(nextSceneId)}
               >
                 下一场
@@ -1419,11 +1506,31 @@ function App() {
               >
                 {isRegeneratingScene ? "生成中..." : "重新生成"}
               </button>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={
+                  connectionMode !== "connected" ||
+                  outlineSourceMode !== "real" ||
+                  !selectedSceneId ||
+                  isProjectOperationBusy
+                }
+                onClick={() => handleStreamScenePreview()}
+              >
+                {isStreamingScene ? "输出中..." : "流式预览"}
+              </button>
             </div>
           </div>
           {sceneDetailMessage ? <div className="notice-banner">{sceneDetailMessage}</div> : null}
+          {sceneStreamMessage ? <div className="notice-banner">{sceneStreamMessage}</div> : null}
           {sceneFallbackMessage ? (
             <div className="notice-banner notice-banner-warning">{sceneFallbackMessage}</div>
+          ) : null}
+          {sceneStreamContent ? (
+            <div className="detail-block">
+              <span className="detail-label">AI 流式预览</span>
+              <pre className="code-block">{sceneStreamContent}</pre>
+            </div>
           ) : null}
           {sceneDetail ? (
             <div className="scene-detail">
