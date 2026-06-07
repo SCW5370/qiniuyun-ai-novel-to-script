@@ -188,6 +188,13 @@ function App() {
   const [isRegeneratingScene, setIsRegeneratingScene] = useState(false);
   const [isValidatingProject, setIsValidatingProject] = useState(false);
   const [isExportingYaml, setIsExportingYaml] = useState(false);
+  const isProjectOperationBusy =
+    isSubmittingSource ||
+    isSummarizingChapters ||
+    isAnalyzing ||
+    isRegeneratingScene ||
+    isValidatingProject ||
+    isExportingYaml;
   const canLoadGeneratedScenes =
     project.status === "ENTITY_READY" ||
     project.status === "OUTLINED" ||
@@ -934,6 +941,24 @@ function App() {
     validationSourceMode === "real" && selectedSceneUsesFallback
       ? "当前校验结果已来自真实接口，但部分告警由规则兜底生成的 Scene 引起。"
       : "";
+  const busyProjectOperationLabel = isSubmittingSource
+    ? isAnalyzing
+      ? "提交正文并自动分析"
+      : "提交正文"
+    : isSummarizingChapters
+      ? "生成章节摘要"
+      : isAnalyzing
+        ? "执行故事分析"
+        : isRegeneratingScene
+          ? "重新生成 Scene"
+          : isValidatingProject
+            ? "执行项目校验"
+            : isExportingYaml
+              ? "导出 YAML"
+              : "";
+  const busyProjectOperationMessage = isProjectOperationBusy
+    ? `当前项目正在${busyProjectOperationLabel}，其他写操作已暂时禁用。`
+    : "";
 
   return (
     <div className="app-shell">
@@ -945,6 +970,7 @@ function App() {
         <button
           className="ghost-button"
           type="button"
+          disabled={isProjectOperationBusy}
           onClick={() => void refreshProjectList(projectKeyword)}
         >
           刷新项目
@@ -958,6 +984,9 @@ function App() {
             <h2>项目入口</h2>
             <span>{projectList.length} projects</span>
           </div>
+          {busyProjectOperationMessage ? (
+            <div className="notice-banner notice-banner-warning">{busyProjectOperationMessage}</div>
+          ) : null}
 
           <div className="form-grid">
             <label className="field-block">
@@ -971,7 +1000,7 @@ function App() {
                 <button
                   className="ghost-button"
                   type="button"
-                  disabled={isCreatingProject || !projectTitleInput.trim()}
+                  disabled={isCreatingProject || isProjectOperationBusy || !projectTitleInput.trim()}
                   onClick={() => void handleCreateProject()}
                 >
                   {isCreatingProject ? "创建中..." : "创建"}
@@ -990,6 +1019,7 @@ function App() {
                 <button
                   className="ghost-button"
                   type="button"
+                  disabled={isProjectOperationBusy}
                   onClick={() => void handleSearchProjects()}
                 >
                   搜索
@@ -1013,6 +1043,7 @@ function App() {
                       : "project-list-item"
                   }
                   type="button"
+                  disabled={isProjectOperationBusy}
                   onClick={() => switchProject(item.projectId)}
                 >
                   <strong>{item.title}</strong>
@@ -1038,7 +1069,7 @@ function App() {
               <button
                 className="ghost-button"
                 type="button"
-                disabled={connectionMode !== "connected" || isAnalyzing}
+                disabled={connectionMode !== "connected" || isProjectOperationBusy}
                 onClick={() => void handleAnalyzeStoryAssets()}
               >
                 {isAnalyzing ? "分析中..." : "执行分析"}
@@ -1142,7 +1173,7 @@ function App() {
               <button
                 className="ghost-button"
                 type="button"
-                disabled={connectionMode !== "connected" || chapters.length === 0 || isSummarizingChapters}
+                disabled={connectionMode !== "connected" || chapters.length === 0 || isProjectOperationBusy}
                 onClick={() => void handleSummarizeChapters()}
               >
                 {isSummarizingChapters ? "生成中..." : "生成摘要"}
@@ -1195,12 +1226,13 @@ function App() {
             className="source-textarea"
             value={sourceTextInput}
             onChange={(event) => setSourceTextInput(event.target.value)}
+            disabled={connectionMode !== "connected" || isProjectOperationBusy}
             placeholder="粘贴小说正文"
           />
           <button
             className="primary-button"
             type="button"
-            disabled={connectionMode !== "connected" || isSubmittingSource || isAnalyzing || !sourceTextInput.trim()}
+            disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceTextInput.trim()}
             onClick={() => void handleSubmitSourceText()}
           >
             {isSubmittingSource ? (isAnalyzing ? "分析中..." : "提交中...") : "提交到当前项目"}
@@ -1331,7 +1363,7 @@ function App() {
                   connectionMode !== "connected" ||
                   outlineSourceMode !== "real" ||
                   !selectedSceneId ||
-                  isRegeneratingScene
+                  isProjectOperationBusy
                 }
                 onClick={() => void handleRegenerateScene()}
               >
@@ -1394,7 +1426,7 @@ function App() {
               <button
                 className="ghost-button"
                 type="button"
-                disabled={connectionMode !== "connected" || isExportingYaml}
+                disabled={connectionMode !== "connected" || isProjectOperationBusy}
                 onClick={() => void handleExportYaml()}
               >
                 {isExportingYaml ? "导出中..." : "导出 YAML"}
@@ -1416,7 +1448,7 @@ function App() {
               <button
                 className="ghost-button"
                 type="button"
-                disabled={connectionMode !== "connected" || outlineSourceMode !== "real" || isValidatingProject}
+                disabled={connectionMode !== "connected" || outlineSourceMode !== "real" || isProjectOperationBusy}
                 onClick={() => void handleValidateProject()}
               >
                 {isValidatingProject ? "校验中..." : "执行校验"}
