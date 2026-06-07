@@ -27,6 +27,11 @@ public class SceneGenerationController {
         return ApiResponse.ok(sceneGenerationService.listOutline(projectId));
     }
 
+    @PostMapping("/outline/incremental")
+    public ApiResponse<List<OutlineSceneResponse>> generateIncrementalOutline(@PathVariable String projectId) {
+        return ApiResponse.ok(sceneGenerationService.generateIncrementalOutline(projectId));
+    }
+
     @GetMapping("/scenes")
     public ApiResponse<List<SceneScriptResponse>> listSceneScripts(@PathVariable String projectId) {
         return ApiResponse.ok(sceneGenerationService.listSceneScripts(projectId));

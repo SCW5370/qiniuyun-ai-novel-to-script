@@ -75,6 +75,10 @@ GET http://localhost:8080/api/projects/{{projectId}}/story-events
 ### 8. 生成并查询场景大纲
 GET http://localhost:8080/api/projects/{{projectId}}/outline
 
+### 8-可选. 为新增事件增量生成场景大纲
+# 先执行追加章节和增量分析，再执行本请求。
+POST http://localhost:8080/api/projects/{{projectId}}/outline/incremental
+
 ### 9. 查询第一个场景剧本
 GET http://localhost:8080/api/projects/{{projectId}}/scenes/S001
 

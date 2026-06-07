@@ -332,6 +332,14 @@ export async function getProjectOutline(projectId: string) {
   return data.map(adaptOutlineScene);
 }
 
+export async function generateProjectOutlineIncremental(projectId: string) {
+  const data = await requestJson<BackendOutlineSceneResponse[]>(
+    `/projects/${projectId}/outline/incremental`,
+    buildJsonPostOptions()
+  );
+  return data.map(adaptOutlineScene);
+}
+
 export async function getProjectScene(projectId: string, sceneId: string) {
   const data = await requestJson<BackendSceneDetailResponse>(
     `/projects/${projectId}/scenes/${sceneId}`

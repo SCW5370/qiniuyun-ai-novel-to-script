@@ -24,9 +24,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -77,6 +79,11 @@ public class SceneGenerationService {
         return projectOperationLock.execute(projectId, () -> listOutlineLocked(projectId));
     }
 
+    @Transactional
+    public List<OutlineSceneResponse> generateIncrementalOutline(String projectId) {
+        return projectOperationLock.execute(projectId, () -> generateIncrementalOutlineLocked(projectId));
+    }
+
     private List<OutlineSceneResponse> listOutlineLocked(String projectId) {
         projectService.getProjectEntity(projectId);
         List<OutlineScene> scenes = outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId);
@@ -84,6 +91,65 @@ public class SceneGenerationService {
             scenes = generateOutline(projectId);
         }
         return scenes.stream().map(this::toOutlineResponse).toList();
+    }
+
+    private List<OutlineSceneResponse> generateIncrementalOutlineLocked(String projectId) {
+        long startedAt = System.currentTimeMillis();
+        log.info("开始增量生成场景大纲: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "outline_generation_incremental", "outline_generating", 55, "开始为新增事件生成场景大纲");
+        projectService.getProjectEntity(projectId);
+
+        List<StoryEvent> events = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
+        if (events.isEmpty()) {
+            throw new IllegalArgumentException("请先执行故事中间资产分析");
+        }
+
+        List<OutlineScene> existingScenes = outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId);
+        if (existingScenes.isEmpty()) {
+            return generateOutline(projectId).stream().map(this::toOutlineResponse).toList();
+        }
+
+        List<StoryEvent> pendingEvents = findPendingOutlineEvents(existingScenes, events);
+        if (pendingEvents.isEmpty()) {
+            progressEventPublisher.jobCompleted(projectId, "outlined", 60, false, "没有发现待生成场景大纲的新事件");
+            return existingScenes.stream().map(this::toOutlineResponse).toList();
+        }
+
+        List<StoryEntity> entities = storyEntityMapper.findByProjectId(projectId);
+        int nextSeqNo = nextOutlineSeqNo(existingScenes);
+        int nextSceneNo = nextSceneIdSequence(existingScenes);
+        List<OutlineScene> newScenes;
+        try {
+            newScenes = parseOutline(
+                    projectId,
+                    aiChatClient.completeJson(
+                            "你是专业影视编剧，负责把新增故事事件拆成追加 Scene 场景大纲。只返回合法 JSON。",
+                            buildIncrementalOutlinePrompt(entities, pendingEvents, existingScenes)
+                    ),
+                    nextSeqNo,
+                    nextSceneNo
+            );
+            if (newScenes.isEmpty()) {
+                newScenes = buildFallbackOutline(projectId, pendingEvents, nextSeqNo, nextSceneNo);
+            }
+        } catch (Exception ex) {
+            log.warn("AI 增量场景大纲生成失败，切换规则兜底: projectId={}, reason={}", projectId, rootCauseMessage(ex));
+            progressEventPublisher.phaseChanged(projectId, "outline_generating", 56, "AI 增量场景大纲生成失败，已切换规则兜底");
+            newScenes = buildFallbackOutline(projectId, pendingEvents, nextSeqNo, nextSceneNo);
+        }
+
+        outlineSceneMapper.insertBatch(newScenes);
+        projectService.updateStatus(projectId, ProjectStatus.OUTLINED);
+        progressEventPublisher.outlineReady(projectId, existingScenes.size() + newScenes.size());
+        log.info(
+                "增量场景大纲生成完成: projectId={}, newSceneCount={}, elapsedMs={}",
+                projectId,
+                newScenes.size(),
+                System.currentTimeMillis() - startedAt
+        );
+        return outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
+                .map(this::toOutlineResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -195,6 +261,9 @@ public class SceneGenerationService {
                     "你是专业影视编剧，负责把小说故事资产拆成 Scene 级场景大纲。只返回合法 JSON。",
                     buildOutlinePrompt(entities, events)
             ));
+            if (scenes.isEmpty()) {
+                scenes = buildFallbackOutline(projectId, events);
+            }
         } catch (Exception ex) {
             log.warn("AI 场景大纲生成失败，切换规则兜底: projectId={}, reason={}", projectId, rootCauseMessage(ex));
             progressEventPublisher.phaseChanged(projectId, "outline_generating", 56, "AI 场景大纲生成失败，已切换规则兜底");
@@ -266,34 +335,76 @@ public class SceneGenerationService {
         return message.length() > 160 ? message.substring(0, 160) : message;
     }
 
+    private List<StoryEvent> findPendingOutlineEvents(List<OutlineScene> existingScenes, List<StoryEvent> events) {
+        Set<String> coveredSourceRefs = new LinkedHashSet<>();
+        for (OutlineScene scene : existingScenes) {
+            coveredSourceRefs.addAll(readStringList(scene.getSourceRefsJson()));
+        }
+        return events.stream()
+                .filter(event -> readStringList(event.getSourceRefsJson()).stream().noneMatch(coveredSourceRefs::contains))
+                .toList();
+    }
+
+    private int nextOutlineSeqNo(List<OutlineScene> existingScenes) {
+        return existingScenes.stream()
+                .map(OutlineScene::getSeqNo)
+                .filter(seqNo -> seqNo != null)
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+    }
+
+    private int nextSceneIdSequence(List<OutlineScene> existingScenes) {
+        return existingScenes.stream()
+                .map(OutlineScene::getSceneId)
+                .map(sceneId -> parseSequence(sceneId, "S"))
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+    }
+
+    private int parseSequence(String value, String prefix) {
+        if (value == null || !value.startsWith(prefix)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(value.substring(prefix.length()));
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
     private List<OutlineScene> parseOutline(String projectId, String json) throws JsonProcessingException {
+        return parseOutline(projectId, json, 1, 1);
+    }
+
+    private List<OutlineScene> parseOutline(String projectId, String json, int startSeqNo, int startSceneNo) throws JsonProcessingException {
         JsonNode scenesNode = objectMapper.readTree(json).path("scenes");
         List<OutlineScene> scenes = new ArrayList<>();
         if (!scenesNode.isArray()) {
             return scenes;
         }
-        int index = 1;
+        int index = 0;
         for (JsonNode node : scenesNode) {
-            String sceneId = "S" + String.format(Locale.ROOT, "%03d", index);
+            int seqNo = startSeqNo + index;
+            String sceneId = "S" + String.format(Locale.ROOT, "%03d", startSceneNo + index);
             JsonNode slugline = node.path("slugline");
             JsonNode purpose = node.path("purpose");
             scenes.add(new OutlineScene(
                     projectId,
                     sceneId,
-                    index,
-                    text(node.path("title").asText(), "场景 " + index),
+                    seqNo,
+                    text(node.path("title").asText(), "场景 " + seqNo),
                     text(slugline.path("intExt").asText(), "INT"),
                     text(slugline.path("locationId").asText(), "L001"),
                     text(slugline.path("timeOfDay").asText(), "DAY"),
                     text(purpose.path("plot").asText(), "推进主要情节"),
                     text(purpose.path("character").asText(), "展示角色选择"),
                     toJson(readStringArray(node.path("characters"), List.of())),
-                    toJson(readStringArray(node.path("sourceRefs"), List.of("ch" + index))),
+                    toJson(readStringArray(node.path("sourceRefs"), List.of("ch" + seqNo))),
                     text(node.path("status").asText(), "READY")
             ));
             index++;
         }
-        return scenes.isEmpty() ? buildFallbackOutline(projectId, storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId)) : scenes;
+        return scenes;
     }
 
     private SceneScript parseSceneScript(String projectId, OutlineScene outlineScene, String json) throws JsonProcessingException {
@@ -312,14 +423,19 @@ public class SceneGenerationService {
     }
 
     private List<OutlineScene> buildFallbackOutline(String projectId, List<StoryEvent> events) {
+        return buildFallbackOutline(projectId, events, 1, 1);
+    }
+
+    private List<OutlineScene> buildFallbackOutline(String projectId, List<StoryEvent> events, int startSeqNo, int startSceneNo) {
         List<OutlineScene> scenes = new ArrayList<>();
-        int index = 1;
-        for (StoryEvent event : events) {
-            String sceneId = "S" + String.format(Locale.ROOT, "%03d", index);
+        for (int i = 0; i < events.size(); i++) {
+            StoryEvent event = events.get(i);
+            int seqNo = startSeqNo + i;
+            String sceneId = "S" + String.format(Locale.ROOT, "%03d", startSceneNo + i);
             scenes.add(new OutlineScene(
                     projectId,
                     sceneId,
-                    index,
+                    seqNo,
                     event.getTitle(),
                     "INT",
                     "L001",
@@ -330,7 +446,6 @@ public class SceneGenerationService {
                     event.getSourceRefsJson(),
                     "READY"
             ));
-            index++;
         }
         return scenes;
     }
@@ -377,6 +492,41 @@ public class SceneGenerationService {
                 故事事件：
                 %s
                 """.formatted(toJson(entities), toJson(events));
+    }
+
+    private String buildIncrementalOutlinePrompt(List<StoryEntity> entities, List<StoryEvent> pendingEvents, List<OutlineScene> existingScenes) {
+        return """
+                请只根据新增故事事件生成追加 Scene 场景大纲。
+                不要重写已有场景，不要引用旧事件生成重复场景。
+                只返回 JSON：
+                {
+                  "scenes": [
+                    {
+                      "title": "场景标题",
+                      "slugline": {"intExt":"INT 或 EXT","locationId":"L001","timeOfDay":"DAY/NIGHT/LATE_NIGHT"},
+                      "purpose": {"plot":"剧情目的","character":"角色目的"},
+                      "characters": ["C001"],
+                      "sourceRefs": ["ch4"],
+                      "status": "READY"
+                    }
+                  ]
+                }
+                要求：
+                1. 每个新增关键事件至少生成 1 个场景。
+                2. characters 只能使用实体中的角色 ID。
+                3. locationId 优先使用实体中的地点 ID。
+                4. sourceRefs 必须沿用新增事件中的 sourceRefs。
+                5. 输出只包含新增场景，不包含已有场景。
+
+                已有场景：
+                %s
+
+                故事实体：
+                %s
+
+                新增故事事件：
+                %s
+                """.formatted(toJson(existingScenes), toJson(entities), toJson(pendingEvents));
     }
 
     private String buildScenePrompt(Project project, OutlineScene outlineScene, List<StoryEntity> entities, List<StoryEvent> events, boolean regenerating) {

@@ -6,6 +6,7 @@ import {
   appendProjectSourceFile,
   createProject,
   exportProjectYaml,
+  generateProjectOutlineIncremental,
   getProject,
   getProjectChapters,
   getProjectOutline,
@@ -602,6 +603,35 @@ function App() {
       setAnalysisMessage(message);
     } finally {
       setIsAnalyzing(false);
+    }
+  }
+
+  async function handleGenerateIncrementalOutline() {
+    if (connectionMode !== "connected" || isProjectOperationBusy) {
+      return;
+    }
+
+    setOutlineMessage("正在为新增事件生成增量场景大纲...");
+
+    try {
+      const previousSceneIds = new Set(outlineScenes.map((scene) => scene.sceneId));
+      const nextScenes = await generateProjectOutlineIncremental(project.projectId);
+      setOutlineScenes(nextScenes);
+      setOutlineSourceMode("real");
+      const firstNewScene = nextScenes.find((scene) => !previousSceneIds.has(scene.sceneId));
+      if (firstNewScene) {
+        setSelectedSceneId(firstNewScene.sceneId);
+      }
+      setOutlineMessage(
+        firstNewScene
+          ? "新增事件已生成追加场景大纲。"
+          : "没有发现待生成场景大纲的新事件。"
+      );
+      await loadProjectDetail(project.projectId);
+      await refreshProjectList();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "无法生成增量场景大纲";
+      setOutlineMessage(message);
     }
   }
 
@@ -1611,7 +1641,17 @@ function App() {
         <section className="panel outline-panel">
           <div className="panel-header">
             <h2>场景大纲</h2>
-            <span>{outlineSourceMode === "real" ? `${outlineScenes.length} scenes` : "Mock 回退"}</span>
+            <div className="panel-header-actions">
+              <span>{outlineSourceMode === "real" ? `${outlineScenes.length} scenes` : "Mock 回退"}</span>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy}
+                onClick={() => void handleGenerateIncrementalOutline()}
+              >
+                增量场景
+              </button>
+            </div>
           </div>
           {outlineMessage ? <div className="notice-banner">{outlineMessage}</div> : null}
           {outlineScenes.length === 0 ? (

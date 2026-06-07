@@ -537,6 +537,22 @@ GET /api/projects/{projectId}/outline
 }
 ```
 
+## 增量生成场景大纲
+
+```http
+POST /api/projects/{projectId}/outline/incremental
+```
+
+说明：
+
+- 用于章节追加并完成 `POST /api/projects/{projectId}/analyze/incremental` 后，为新增事件追加场景大纲。
+- 旧场景大纲和旧 Scene 剧本不会被删除或重写。
+- 后端通过已有场景大纲的 `sourceRefs` 判断哪些事件已经生成过场景。
+- 新场景会从当前最大 `seqNo` 和最大 `S###` 后继续编号。
+- 如果没有发现待生成场景的新事件，会返回当前完整场景大纲列表。
+
+成功响应结构与“查询场景大纲”一致，返回追加后的完整场景大纲列表。
+
 ## 查询 Scene 详情
 
 ```http
