@@ -176,9 +176,12 @@ public class SceneGenerationService {
                 .toList();
     }
 
-    @Transactional
     public SceneScriptResponse getSceneScript(String projectId, String sceneId) {
-        return projectOperationLock.execute(projectId, () -> getSceneScriptLocked(projectId, sceneId));
+        SceneScriptResponse response = readOnlyTransactionTemplate.execute(status -> getSceneScriptLocked(projectId, sceneId));
+        if (response == null) {
+            throw new IllegalStateException("无法读取 Scene: " + sceneId);
+        }
+        return response;
     }
 
     public List<SceneScriptResponse> generateMissingSceneScripts(String projectId) {
