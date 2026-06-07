@@ -20,13 +20,11 @@ public class ProgressEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(ProgressEventPublisher.class);
 
-    private static final long TIMEOUT_MS = 30 * 60 * 1000L;
-
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
     public SseEmitter subscribe(Project project) {
         String projectId = project.getProjectId();
-        SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
+        SseEmitter emitter = new SseEmitter(0L);
         emitters.computeIfAbsent(projectId, ignored -> new CopyOnWriteArrayList<>()).add(emitter);
         emitter.onCompletion(() -> remove(projectId, emitter));
         emitter.onTimeout(() -> remove(projectId, emitter));

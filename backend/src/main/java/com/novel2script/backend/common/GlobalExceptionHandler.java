@@ -3,9 +3,11 @@ package com.novel2script.backend.common;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 import java.io.IOException;
 
@@ -36,6 +38,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IOException.class)
     public ResponseEntity<Void> handleIOException(IOException ex) {
+        return ResponseEntity.noContent().build();
+    }
+
+    @ExceptionHandler({AsyncRequestTimeoutException.class, HttpMediaTypeNotAcceptableException.class})
+    public ResponseEntity<Void> handleAsyncOrNegotiationException(Exception ex) {
         return ResponseEntity.noContent().build();
     }
 
