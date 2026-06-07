@@ -11,6 +11,22 @@ spring:
     username: ${MYSQL_APP_USERNAME:novel2script_app}
     password: ${MYSQL_APP_PASSWORD:dev_app_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:novel2script_mq}
+    password: ${RABBITMQ_PASSWORD:dev_rabbitmq_password}
+    virtual-host: ${RABBITMQ_VHOST:novel2script}
+    listener:
+      simple:
+        acknowledge-mode: auto
+        concurrency: ${WORKFLOW_JOB_CONSUMER_CONCURRENCY:1}
+        max-concurrency: ${WORKFLOW_JOB_CONSUMER_MAX_CONCURRENCY:2}
+        retry:
+          enabled: true
+          initial-interval: 2000
+          max-attempts: 3
+          multiplier: 2
   servlet:
     multipart:
       max-file-size: ${SOURCE_FILE_MAX_MB:20}MB

@@ -228,6 +228,7 @@ Rules:
 - 当前 `GET /api/projects/{projectId}/events` 是项目级 SSE 进度流：连接后先发送当前阶段，后续分析、场景生成、校验和导出会推送阶段事件。
 - 当前 `GET /api/projects/{projectId}/scenes/{sceneId}/stream` 是 Scene 文本流式预览接口，用于逐段展示 AI 生成内容。
 - 场景大纲生成支持按故事事件分批处理；批次 AI 超时后会自动拆分为更小批次重试，降低中长篇小说直接进入规则兜底的概率。
+- 异步长任务已接入 RabbitMQ：`POST /jobs/*` 负责投递任务消息，后端 MQ 消费端执行分析或大纲生成。
 
 ## Compatibility Rules
 

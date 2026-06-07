@@ -11,7 +11,7 @@
 - AI 配置从本地 `.env` 读取：`AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL_ID`、`AI_TIMEOUT_SECONDS`、`AI_MAX_RETRIES`
 - 小说上传限制从本地 `.env` 读取：`SOURCE_FILE_MAX_MB`、`SOURCE_REQUEST_MAX_MB`
 - 工作流保护配置从本地 `.env` 读取：`WORKFLOW_MAX_AUTO_GENERATE_SCENES`、`OUTLINE_EVENTS_PER_BATCH`
-- RabbitMQ 配置从本地 `.env` 读取：`RABBITMQ_USERNAME`、`RABBITMQ_PASSWORD`、`RABBITMQ_VHOST`、`RABBITMQ_PORT`、`RABBITMQ_MANAGEMENT_PORT`
+- RabbitMQ 配置从本地 `.env` 读取：`RABBITMQ_HOST`、`RABBITMQ_USERNAME`、`RABBITMQ_PASSWORD`、`RABBITMQ_VHOST`、`RABBITMQ_PORT`、`RABBITMQ_MANAGEMENT_PORT`
 
 ## 本地中间件
 
@@ -30,6 +30,7 @@
 RABBITMQ_USERNAME=novel2script_mq
 RABBITMQ_PASSWORD=dev_rabbitmq_password
 RABBITMQ_VHOST=novel2script
+RABBITMQ_HOST=localhost
 RABBITMQ_PORT=5672
 RABBITMQ_MANAGEMENT_PORT=15672
 ```
@@ -740,7 +741,7 @@ GET /api/projects/{projectId}/events
 
 ## 异步长任务
 
-长篇小说处理建议使用异步任务接口。接口会立即返回 `jobId`，后台继续执行，前端通过 `/events` 接收进度，也可以通过任务查询接口轮询状态。
+长篇小说处理建议使用异步任务接口。接口会立即返回 `jobId`，任务消息投递到 RabbitMQ，后端消费端从队列取出后后台执行；前端通过 `/events` 接收进度，也可以通过任务查询接口轮询状态。
 
 ### 提交故事资产分析任务
 
@@ -797,6 +798,16 @@ GET /api/projects/{projectId}/jobs/{jobId}
 | `RUNNING` | 任务已提交或正在执行 |
 | `SUCCEEDED` | 任务执行成功 |
 | `FAILED` | 任务执行失败，可查看 `message` |
+
+RabbitMQ 队列配置：
+
+| 配置 | 默认值 |
+| --- | --- |
+| `WORKFLOW_JOB_EXCHANGE` | `novel2script.workflow` |
+| `WORKFLOW_JOB_QUEUE` | `novel2script.workflow.jobs` |
+| `WORKFLOW_JOB_ROUTING_KEY` | `workflow.job` |
+| `WORKFLOW_JOB_CONSUMER_CONCURRENCY` | `1` |
+| `WORKFLOW_JOB_CONSUMER_MAX_CONCURRENCY` | `2` |
 
 ## 调试示例
 
