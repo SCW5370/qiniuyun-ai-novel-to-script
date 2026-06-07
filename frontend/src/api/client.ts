@@ -10,6 +10,7 @@ import type {
   BackendStoryEntityResponse,
   BackendStoryEventResponse,
   BackendValidationReportResponse,
+  BackendWorkflowJobResponse,
   ChapterViewModel,
   OutlineSceneViewModel,
   ProjectViewModel,
@@ -17,7 +18,8 @@ import type {
   StoryAnalysisViewModel,
   StoryEntityViewModel,
   StoryEventViewModel,
-  ValidationReportViewModel
+  ValidationReportViewModel,
+  WorkflowJobViewModel
 } from "./types";
 
 const PHASE_LABELS: Record<BackendProjectStatus, { phase: string; progress: number }> = {
@@ -299,20 +301,19 @@ export async function appendProjectSourceFile(projectId: string, file: File) {
 }
 
 export async function analyzeStoryAssets(projectId: string) {
-  // 对齐开发契约：分析会写入实体和事件资产，因此必须使用 POST /analyze。
-  const data = await requestJson<BackendStoryAnalysisResponse>(
+  const data = await requestJson<BackendWorkflowJobResponse>(
     `/projects/${projectId}/analyze`,
     buildJsonPostOptions()
   );
-  return adaptStoryAnalysis(data);
+  return data as WorkflowJobViewModel;
 }
 
 export async function analyzeStoryAssetsIncremental(projectId: string) {
-  const data = await requestJson<BackendStoryAnalysisResponse>(
+  const data = await requestJson<BackendWorkflowJobResponse>(
     `/projects/${projectId}/analyze/incremental`,
     buildJsonPostOptions()
   );
-  return adaptStoryAnalysis(data);
+  return data as WorkflowJobViewModel;
 }
 
 export async function getStoryEntities(projectId: string) {
@@ -333,11 +334,19 @@ export async function getProjectOutline(projectId: string) {
 }
 
 export async function generateProjectOutlineIncremental(projectId: string) {
-  const data = await requestJson<BackendOutlineSceneResponse[]>(
+  const data = await requestJson<BackendWorkflowJobResponse>(
     `/projects/${projectId}/outline/incremental`,
     buildJsonPostOptions()
   );
-  return data.map(adaptOutlineScene);
+  return data as WorkflowJobViewModel;
+}
+
+export async function generateProjectOutline(projectId: string) {
+  const data = await requestJson<BackendWorkflowJobResponse>(
+    `/projects/${projectId}/jobs/outline`,
+    buildJsonPostOptions()
+  );
+  return data as WorkflowJobViewModel;
 }
 
 export async function getProjectScene(projectId: string, sceneId: string) {

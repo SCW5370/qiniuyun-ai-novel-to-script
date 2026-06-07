@@ -4,6 +4,8 @@ import com.novel2script.backend.common.ApiResponse;
 import com.novel2script.backend.story.dto.StoryAnalysisResponse;
 import com.novel2script.backend.story.dto.StoryEntityResponse;
 import com.novel2script.backend.story.dto.StoryEventResponse;
+import com.novel2script.backend.workflow.WorkflowJobService;
+import com.novel2script.backend.workflow.dto.WorkflowJobResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,18 +20,21 @@ public class StoryAnalysisController {
 
     private final StoryAnalysisService storyAnalysisService;
 
-    public StoryAnalysisController(StoryAnalysisService storyAnalysisService) {
+    private final WorkflowJobService workflowJobService;
+
+    public StoryAnalysisController(StoryAnalysisService storyAnalysisService, WorkflowJobService workflowJobService) {
         this.storyAnalysisService = storyAnalysisService;
+        this.workflowJobService = workflowJobService;
     }
 
     @PostMapping("/analyze")
-    public ApiResponse<StoryAnalysisResponse> analyze(@PathVariable String projectId) {
-        return ApiResponse.ok(storyAnalysisService.analyze(projectId));
+    public ApiResponse<WorkflowJobResponse> analyze(@PathVariable String projectId) {
+        return ApiResponse.ok(workflowJobService.submitStoryAnalysis(projectId));
     }
 
     @PostMapping("/analyze/incremental")
-    public ApiResponse<StoryAnalysisResponse> analyzeIncremental(@PathVariable String projectId) {
-        return ApiResponse.ok(storyAnalysisService.analyzeIncremental(projectId));
+    public ApiResponse<WorkflowJobResponse> analyzeIncremental(@PathVariable String projectId) {
+        return ApiResponse.ok(workflowJobService.submitIncrementalStoryAnalysis(projectId));
     }
 
     @GetMapping("/entities")

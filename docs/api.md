@@ -392,12 +392,12 @@ POST /api/projects/{projectId}/analyze
 处理规则：
 
 - 该接口依赖项目已经完成章节切分。
-- 当前实现为 AI 优先、规则兜底。
-- 执行时会删除该项目旧的实体、事件、场景大纲和 Scene 剧本，并写入新的故事资产结果。
-- 成功后项目状态更新为 `ENTITY_READY`。
-- AI 不可用时仍返回基础结构，避免联调中断。
+- 当前接口已统一为 RabbitMQ 异步任务入口，短篇和长篇都会投递 MQ。
+- 接口立即返回 `jobId`，MQ 消费端后台执行 AI 优先、规则兜底的故事资产分析。
+- 消费端执行时会删除该项目旧的实体、事件、场景大纲和 Scene 剧本，并写入新的故事资产结果。
+- 成功后项目状态更新为 `ENTITY_READY`，前端通过 `/events` 接收进度并通过 `/entities`、`/story-events` 查询结果。
+- AI 不可用时消费端仍会写入基础结构，避免联调中断。
 - 中长篇会按章节自动拆成多个 AI 批次，避免一次性把全书塞进模型上下文导致后续章节被截断。
-- 响应中的 `aiSuccess`、`fallbackUsed`、`generationMode`、`message` 用于前端展示本次分析是否由 AI 完成。
 
 成功响应：
 
@@ -406,38 +406,13 @@ POST /api/projects/{projectId}/analyze
   "success": true,
   "message": "ok",
   "data": {
+    "jobId": "job_0f3c6e3c6c8b4f0a9c43f8d0e5a8b1d2",
     "projectId": "proj_20260606_000001",
-    "status": "ENTITY_READY",
-    "entityCount": 1,
-    "eventCount": 1,
-    "generationMode": "AI",
-    "aiSuccess": true,
-    "fallbackUsed": false,
-    "message": "故事资产由 AI 抽取生成",
-    "entities": [
-      {
-        "entityId": "C001",
-        "entityType": "CHARACTER",
-        "canonicalName": "林舟",
-        "aliases": ["林舟"],
-        "profile": "青年调查者，因一本失踪手稿进入旧书店。",
-        "sourceRefs": ["ch1"],
-        "createdAt": "2026-06-06T00:01:00",
-        "updatedAt": "2026-06-06T00:01:00"
-      }
-    ],
-    "events": [
-      {
-        "eventId": "E001",
-        "chapterId": 1,
-        "eventOrder": 1,
-        "title": "第一章 雨夜",
-        "summary": "林舟推门而入。",
-        "sourceRefs": ["ch1"],
-        "createdAt": "2026-06-06T00:01:00",
-        "updatedAt": "2026-06-06T00:01:00"
-      }
-    ]
+    "jobType": "story_analysis_async",
+    "status": "QUEUED",
+    "message": "故事资产分析任务已提交到 MQ",
+    "createdAt": "2026-06-07T18:20:00",
+    "updatedAt": "2026-06-07T18:20:00"
   }
 }
 ```
@@ -457,6 +432,7 @@ POST /api/projects/{projectId}/analyze/incremental
 处理规则：
 
 - 该接口用于章节追加后的增量分析。
+- 当前接口已统一为 RabbitMQ 异步任务入口，接口立即返回 `jobId`。
 - 后端会找出尚未生成 `story_events` 的章节，只分析这些新增章节。
 - 新增章节较多时同样会按章节拆成多个 AI 批次。
 - 旧实体、旧事件、旧场景大纲和旧 Scene 剧本不会被删除。
@@ -465,13 +441,7 @@ POST /api/projects/{projectId}/analyze/incremental
 - 写入新事件后，后端会按章节真实顺序重排所有事件的 `eventOrder`，保留原有 `eventId`。
 - 如果没有发现待分析的新章节，会返回现有实体和事件，并在 `message` 中说明。
 
-成功响应结构与“分析故事中间资产”一致。`generationMode` 可能为：
-
-| 值 | 说明 |
-| --- | --- |
-| `INCREMENTAL_AI` | 新增章节由 AI 抽取 |
-| `INCREMENTAL_FALLBACK` | AI 失败后使用规则兜底 |
-| `INCREMENTAL_NONE` | 没有待增量分析的新章节 |
+成功响应结构与“分析故事中间资产”的任务响应一致。
 
 ## 查询故事实体
 
@@ -539,12 +509,12 @@ GET /api/projects/{projectId}/outline
 
 说明：
 
-- 依赖已执行 `POST /api/projects/{projectId}/analyze`。
-- 首次查询时会生成并保存真实场景大纲。
+- 依赖已完成故事资产分析和场景大纲生成任务。
+- 当前接口只查询已经生成的真实场景大纲，不会在查询时同步触发生成。
+- 需要生成场景大纲时，调用 `POST /api/projects/{projectId}/jobs/outline`。
 - 事件较多时会按事件批次生成场景大纲，避免一次性超过 AI 上下文。
 - 如果某个场景大纲批次 AI 超时或失败，后端会自动把该批次拆成更小批次重试；只有单个事件仍失败时才使用规则兜底。
 - `OUTLINE_EVENTS_PER_BATCH` 可控制每批故事事件数量，默认值为 `6`。中长篇演示建议设置为 `3` 到 `6`。
-- 成功后项目状态更新为 `OUTLINED`。
 
 成功响应：
 
@@ -582,15 +552,16 @@ POST /api/projects/{projectId}/outline/incremental
 
 说明：
 
+- 当前接口已统一为 RabbitMQ 异步任务入口，接口立即返回 `jobId`。
 - 用于章节追加并完成 `POST /api/projects/{projectId}/analyze/incremental` 后，为新增事件追加场景大纲。
 - 旧场景大纲和旧 Scene 剧本不会被删除或重写。
 - 后端通过已有场景大纲的 `sourceRefs` 判断哪些事件已经生成过场景。
 - 新增事件较多时会按事件批次生成追加场景。
 - 新场景会从当前最大 `seqNo` 和最大 `S###` 后继续编号。
 - 写入新场景后，后端会按 `sourceRefs` 对应章节顺序重排所有场景的 `seqNo`，保留原有 `sceneId` 和已生成的 Scene 剧本。
-- 如果没有发现待生成场景的新事件，会返回当前完整场景大纲列表。
+- 如果没有发现待生成场景的新事件，MQ 消费端会直接完成任务。
 
-成功响应结构与“查询场景大纲”一致，返回追加后的完整场景大纲列表。
+成功响应结构与“分析故事中间资产”的任务响应一致。
 
 ## 查询 Scene 详情
 

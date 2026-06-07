@@ -250,3 +250,15 @@ export type ProgressStreamEvent = {
 };
 
 export type WrappedProgressStreamEvent = ProgressStreamEvent;
+
+export type BackendWorkflowJobResponse = {
+  jobId: string;
+  projectId: string;
+  jobType: string;
+  status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  message: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkflowJobViewModel = BackendWorkflowJobResponse;

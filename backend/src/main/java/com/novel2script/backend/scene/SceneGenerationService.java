@@ -83,6 +83,14 @@ public class SceneGenerationService {
         return projectOperationLock.execute(projectId, () -> listOutlineLocked(projectId));
     }
 
+    @Transactional(readOnly = true)
+    public List<OutlineSceneResponse> listExistingOutline(String projectId) {
+        projectService.getProjectEntity(projectId);
+        return outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
+                .map(this::toOutlineResponse)
+                .toList();
+    }
+
     @Transactional
     public List<OutlineSceneResponse> generateIncrementalOutline(String projectId) {
         return projectOperationLock.execute(projectId, () -> generateIncrementalOutlineLocked(projectId));

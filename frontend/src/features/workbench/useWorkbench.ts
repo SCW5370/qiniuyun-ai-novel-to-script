@@ -6,6 +6,7 @@ import {
   appendProjectSourceFile,
   createProject,
   exportProjectYaml,
+  generateProjectOutline,
   generateProjectOutlineIncremental,
   getProject,
   getProjectChapters,
@@ -216,40 +217,50 @@ export function useWorkbench() {
     }
   }
 
-  async function runStoryAnalysis(targetProjectId: string) {
-    setAnalysisStatus("");
-    setAnalysisMessage("正在抽取角色、地点和故事事件...");
-    const result = await analyzeStoryAssets(targetProjectId);
-    const [entities, events] = await Promise.all([
+  async function refreshGeneratedAssets(targetProjectId: string) {
+    const [entities, events, scenes] = await Promise.all([
       getStoryEntities(targetProjectId),
-      getStoryEvents(targetProjectId)
+      getStoryEvents(targetProjectId),
+      getProjectOutline(targetProjectId)
     ]);
 
-    setStoryEntities(entities);
-    setStoryEvents(events);
-    setStoryAssetsMessage("");
-    setStoryEventsMessage("");
-    setAnalysisResult(result);
-    setAnalysisStatus(result.aiSuccess ? "success" : "warning");
-    setAnalysisMessage(
-      `${result.message}，已同步 ${result.entityCount} 个实体和 ${result.eventCount} 个事件。`
-    );
+    if (entities.length > 0 || events.length > 0) {
+      setStoryEntities(entities);
+      setStoryEvents(events);
+      setStoryAssetsMessage("");
+      setStoryEventsMessage("");
+      setAnalysisStatus("success");
+      setAnalysisMessage(`已同步 ${entities.length} 个实体和 ${events.length} 个事件。`);
+    }
 
-    try {
-      setOutlineMessage("正在生成并加载场景大纲...");
-      const scenes = await getProjectOutline(targetProjectId);
-      if (scenes.length > 0) {
-        setOutlineScenes(scenes);
-        setOutlineSourceMode("real");
-        setOutlineMessage("已读取真实场景大纲。");
-      }
-    } catch {
-      setOutlineMessage("故事资产已生成，场景大纲稍后会自动加载。");
+    if (scenes.length > 0) {
+      setOutlineScenes(scenes);
+      setOutlineSourceMode("real");
+      setOutlineMessage("已读取真实场景大纲。");
     }
 
     await loadProjectDetail(targetProjectId);
     await refreshProjectList();
-    return result;
+    return { entities, events, scenes };
+  }
+
+  async function refreshGeneratedAssetsAndContinue(targetProjectId: string) {
+    const { events, scenes } = await refreshGeneratedAssets(targetProjectId);
+    if (events.length > 0 && scenes.length === 0) {
+      const job = await generateProjectOutline(targetProjectId);
+      setOutlineMessage(`场景大纲任务已提交到 MQ：${job.jobId}`);
+    }
+  }
+
+  async function runStoryAnalysis(targetProjectId: string) {
+    setAnalysisStatus("");
+    setAnalysisMessage("故事资产分析任务已提交到 MQ，后端正在后台处理...");
+    const job = await analyzeStoryAssets(targetProjectId);
+    setAnalysisStatus("success");
+    setAnalysisMessage(`故事资产分析任务已提交：${job.jobId}`);
+    await loadProjectDetail(targetProjectId);
+    await refreshProjectList();
+    return job;
   }
 
   async function completeSourceSubmission(nextChapters: ChapterViewModel[]) {
@@ -269,16 +280,16 @@ export function useWorkbench() {
     setStoryEntities([]);
     setStoryEvents([]);
     setChapterSummaryMessage("");
-    setSourceSubmitMessage(`已切分 ${nextChapters.length} 章，正在自动分析故事资产。`);
+    setSourceSubmitMessage(`已切分 ${nextChapters.length} 章，正在提交 MQ 分析任务。`);
 
     setIsAnalyzing(true);
     try {
       await runStoryAnalysis(project.projectId);
-      setSourceSubmitMessage(`已切分 ${nextChapters.length} 章，故事资产分析完成。`);
+      setSourceSubmitMessage(`已切分 ${nextChapters.length} 章，故事资产分析任务已提交。`);
     } catch (analysisError) {
       setAnalysisStatus("error");
       setAnalysisMessage(analysisError instanceof Error ? analysisError.message : "自动故事分析失败");
-      setSourceSubmitMessage("正文已提交，但自动分析失败，可执行全量分析重试。");
+      setSourceSubmitMessage("正文已提交，但 MQ 分析任务提交失败，可执行全量分析重试。");
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
     } finally {
@@ -418,16 +429,9 @@ export function useWorkbench() {
     setAnalysisStatus("");
 
     try {
-      const result = await analyzeStoryAssetsIncremental(project.projectId);
-      setAnalysisResult(result);
-      setStoryEntities(result.entities);
-      setStoryEvents(result.events);
-      setStoryAssetsMessage("");
-      setStoryEventsMessage("");
-      setAnalysisStatus(result.fallbackUsed ? "warning" : "success");
-      setAnalysisMessage(
-        `${result.message}，当前共有 ${result.entityCount} 个实体和 ${result.eventCount} 个事件。`
-      );
+      const job = await analyzeStoryAssetsIncremental(project.projectId);
+      setAnalysisStatus("success");
+      setAnalysisMessage(`增量故事资产分析任务已提交：${job.jobId}`);
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
     } catch (error) {
@@ -444,13 +448,8 @@ export function useWorkbench() {
     setOutlineMessage("正在为新增事件生成追加场景...");
 
     try {
-      const previousSceneIds = new Set(outlineScenes.map((scene) => scene.sceneId));
-      const nextScenes = await generateProjectOutlineIncremental(project.projectId);
-      setOutlineScenes(nextScenes);
-      setOutlineSourceMode("real");
-      const firstNewScene = nextScenes.find((scene) => !previousSceneIds.has(scene.sceneId));
-      if (firstNewScene) setSelectedSceneId(firstNewScene.sceneId);
-      setOutlineMessage(firstNewScene ? "新增事件已生成追加场景。" : "没有待生成场景的新事件。");
+      const job = await generateProjectOutlineIncremental(project.projectId);
+      setOutlineMessage(`增量场景大纲任务已提交：${job.jobId}`);
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
     } catch (error) {
@@ -853,6 +852,11 @@ export function useWorkbench() {
         const parsed = parseProgressStreamMessage(rawMessage);
         if (parsed && parsed.data.projectId === project.projectId) {
           applyProgressEvent(parsed);
+          if (parsed.event === "job.completed" || parsed.event === "outline.ready") {
+            void refreshGeneratedAssetsAndContinue(project.projectId).catch(() => {
+              setProgressSourceMode("static");
+            });
+          }
         }
       } catch {
         setProgressSourceMode("static");
