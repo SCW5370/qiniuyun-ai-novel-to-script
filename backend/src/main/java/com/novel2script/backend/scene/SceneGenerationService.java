@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novel2script.backend.ai.AiChatClient;
+import com.novel2script.backend.common.ProjectOperationLock;
 import com.novel2script.backend.project.Project;
 import com.novel2script.backend.project.ProjectService;
 import com.novel2script.backend.project.ProjectStatus;
@@ -37,6 +38,7 @@ public class SceneGenerationService {
     private final SceneScriptMapper sceneScriptMapper;
     private final AiChatClient aiChatClient;
     private final ObjectMapper objectMapper;
+    private final ProjectOperationLock projectOperationLock;
 
     public SceneGenerationService(
             ProjectService projectService,
@@ -45,7 +47,8 @@ public class SceneGenerationService {
             OutlineSceneMapper outlineSceneMapper,
             SceneScriptMapper sceneScriptMapper,
             AiChatClient aiChatClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ProjectOperationLock projectOperationLock
     ) {
         this.projectService = projectService;
         this.storyEntityMapper = storyEntityMapper;
@@ -54,10 +57,15 @@ public class SceneGenerationService {
         this.sceneScriptMapper = sceneScriptMapper;
         this.aiChatClient = aiChatClient;
         this.objectMapper = objectMapper;
+        this.projectOperationLock = projectOperationLock;
     }
 
     @Transactional
     public List<OutlineSceneResponse> listOutline(String projectId) {
+        return projectOperationLock.execute(projectId, () -> listOutlineLocked(projectId));
+    }
+
+    private List<OutlineSceneResponse> listOutlineLocked(String projectId) {
         projectService.getProjectEntity(projectId);
         List<OutlineScene> scenes = outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId);
         if (scenes.isEmpty()) {
@@ -76,6 +84,10 @@ public class SceneGenerationService {
 
     @Transactional
     public SceneScriptResponse getSceneScript(String projectId, String sceneId) {
+        return projectOperationLock.execute(projectId, () -> getSceneScriptLocked(projectId, sceneId));
+    }
+
+    private SceneScriptResponse getSceneScriptLocked(String projectId, String sceneId) {
         projectService.getProjectEntity(projectId);
         return sceneScriptMapper.findByProjectIdAndSceneId(projectId, sceneId)
                 .map(this::toSceneScriptResponse)
@@ -84,6 +96,10 @@ public class SceneGenerationService {
 
     @Transactional
     public SceneScriptResponse regenerateSceneScript(String projectId, String sceneId) {
+        return projectOperationLock.execute(projectId, () -> regenerateSceneScriptLocked(projectId, sceneId));
+    }
+
+    private SceneScriptResponse regenerateSceneScriptLocked(String projectId, String sceneId) {
         projectService.getProjectEntity(projectId);
         sceneScriptMapper.deleteByProjectIdAndSceneId(projectId, sceneId);
         return toSceneScriptResponse(generateSceneScript(projectId, sceneId, true));

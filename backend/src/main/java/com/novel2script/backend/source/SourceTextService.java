@@ -1,5 +1,6 @@
 package com.novel2script.backend.source;
 
+import com.novel2script.backend.common.ProjectOperationLock;
 import com.novel2script.backend.project.Project;
 import com.novel2script.backend.project.ProjectService;
 import com.novel2script.backend.project.ProjectStatus;
@@ -31,6 +32,8 @@ public class SourceTextService {
 
     private final ChapterSplitter chapterSplitter;
 
+    private final ProjectOperationLock projectOperationLock;
+
     public SourceTextService(
             ProjectService projectService,
             SourceChapterMapper sourceChapterMapper,
@@ -38,7 +41,8 @@ public class SourceTextService {
             StoryEventMapper storyEventMapper,
             OutlineSceneMapper outlineSceneMapper,
             SceneScriptMapper sceneScriptMapper,
-            ChapterSplitter chapterSplitter
+            ChapterSplitter chapterSplitter,
+            ProjectOperationLock projectOperationLock
     ) {
         this.projectService = projectService;
         this.sourceChapterMapper = sourceChapterMapper;
@@ -47,10 +51,15 @@ public class SourceTextService {
         this.outlineSceneMapper = outlineSceneMapper;
         this.sceneScriptMapper = sceneScriptMapper;
         this.chapterSplitter = chapterSplitter;
+        this.projectOperationLock = projectOperationLock;
     }
 
     @Transactional
     public List<ChapterResponse> submitSource(String projectId, SubmitSourceRequest request) {
+        return projectOperationLock.execute(projectId, () -> submitSourceLocked(projectId, request));
+    }
+
+    private List<ChapterResponse> submitSourceLocked(String projectId, SubmitSourceRequest request) {
         Project project = projectService.getProjectEntity(projectId);
         projectService.updateStatus(projectId, ProjectStatus.SOURCE_SUBMITTED);
 

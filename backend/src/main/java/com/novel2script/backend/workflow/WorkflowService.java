@@ -1,5 +1,6 @@
 package com.novel2script.backend.workflow;
 
+import com.novel2script.backend.common.ProjectOperationLock;
 import com.novel2script.backend.project.Project;
 import com.novel2script.backend.project.ProjectService;
 import com.novel2script.backend.project.ProjectStatus;
@@ -22,13 +23,24 @@ public class WorkflowService {
 
     private final SceneGenerationService sceneGenerationService;
 
-    public WorkflowService(ProjectService projectService, SceneGenerationService sceneGenerationService) {
+    private final ProjectOperationLock projectOperationLock;
+
+    public WorkflowService(
+            ProjectService projectService,
+            SceneGenerationService sceneGenerationService,
+            ProjectOperationLock projectOperationLock
+    ) {
         this.projectService = projectService;
         this.sceneGenerationService = sceneGenerationService;
+        this.projectOperationLock = projectOperationLock;
     }
 
     @Transactional
     public ValidationReportResponse validateProject(String projectId) {
+        return projectOperationLock.execute(projectId, () -> validateProjectLocked(projectId));
+    }
+
+    private ValidationReportResponse validateProjectLocked(String projectId) {
         projectService.getProjectEntity(projectId);
         List<OutlineSceneResponse> outline = sceneGenerationService.listOutline(projectId);
         List<ValidationReportResponse.ValidationItemResponse> items = new ArrayList<>();
@@ -67,6 +79,10 @@ public class WorkflowService {
 
     @Transactional
     public String exportYaml(String projectId) {
+        return projectOperationLock.execute(projectId, () -> exportYamlLocked(projectId));
+    }
+
+    private String exportYamlLocked(String projectId) {
         Project project = projectService.getProjectEntity(projectId);
         List<OutlineSceneResponse> outline = sceneGenerationService.listOutline(projectId);
         List<SceneScriptResponse> scenes = new ArrayList<>();

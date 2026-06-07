@@ -1,5 +1,6 @@
 package com.novel2script.backend.source;
 
+import com.novel2script.backend.common.ProjectOperationLock;
 import com.novel2script.backend.project.ProjectService;
 import com.novel2script.backend.source.dto.ChapterResponse;
 import org.springframework.stereotype.Service;
@@ -16,18 +17,26 @@ public class ChapterSummaryService {
 
     private final ChapterSummaryGenerator chapterSummaryGenerator;
 
+    private final ProjectOperationLock projectOperationLock;
+
     public ChapterSummaryService(
             ProjectService projectService,
             SourceChapterMapper sourceChapterMapper,
-            ChapterSummaryGenerator chapterSummaryGenerator
+            ChapterSummaryGenerator chapterSummaryGenerator,
+            ProjectOperationLock projectOperationLock
     ) {
         this.projectService = projectService;
         this.sourceChapterMapper = sourceChapterMapper;
         this.chapterSummaryGenerator = chapterSummaryGenerator;
+        this.projectOperationLock = projectOperationLock;
     }
 
     @Transactional
     public List<ChapterResponse> summarizeChapters(String projectId) {
+        return projectOperationLock.execute(projectId, () -> summarizeChaptersLocked(projectId));
+    }
+
+    private List<ChapterResponse> summarizeChaptersLocked(String projectId) {
         projectService.getProjectEntity(projectId);
         List<SourceChapter> chapters = sourceChapterMapper.findByProjectIdOrderByChapterNoAsc(projectId);
         if (chapters.isEmpty()) {

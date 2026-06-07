@@ -315,15 +315,51 @@ function App() {
     }
   }
 
+  async function runStoryAnalysis(targetProjectId: string) {
+    const result = await analyzeStoryAssets(targetProjectId);
+    const [entities, events] = await Promise.all([
+      getStoryEntities(targetProjectId),
+      getStoryEvents(targetProjectId)
+    ]);
+
+    setStoryEntities(entities);
+    setStoryEvents(events);
+    setStoryAssetsMessage("");
+    setStoryEventsMessage("");
+    setAnalysisResult(result);
+    setAnalysisStatus(result.aiSuccess ? "success" : "warning");
+    setAnalysisMessage(
+      `${result.message}，已同步 ${result.entityCount} 个实体和 ${result.eventCount} 个事件。`
+    );
+
+    try {
+      const scenes = await getProjectOutline(targetProjectId);
+      if (scenes.length > 0) {
+        setOutlineScenes(scenes);
+        setOutlineSourceMode("real");
+        setOutlineMessage("已读取真实场景大纲。");
+      }
+    } catch {
+      setOutlineMessage("故事资产已生成，场景大纲稍后会自动加载。");
+    }
+
+    await loadProjectDetail(targetProjectId);
+    await refreshProjectList();
+    return result;
+  }
+
   async function handleSubmitSourceText() {
     const content = sourceTextInput.trim();
-    if (connectionMode !== "connected" || !content || isSubmittingSource) {
+    if (connectionMode !== "connected" || !content || isSubmittingSource || isAnalyzing) {
       return;
     }
 
     setIsSubmittingSource(true);
     setProjectActionMessage("");
     setSourceSubmitMessage("");
+    setAnalysisResult(null);
+    setAnalysisMessage("");
+    setAnalysisStatus("");
 
     try {
       // 对齐开发契约：小说正文提交到 POST /api/projects/{projectId}/source。
@@ -347,14 +383,32 @@ function App() {
       setProgressStreamPhase("");
       setProgressStreamValue(null);
       setProgressSourceMode("static");
-      setAnalysisResult(null);
       setStoryEntities([]);
       setStoryEvents([]);
       setSourceTextInput("");
       setChapterSummaryMessage("");
-      setSourceSubmitMessage(`小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节。`);
-      await loadProjectDetail(project.projectId);
-      await refreshProjectList();
+      setSourceSubmitMessage(
+        `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，正在自动执行故事分析。`
+      );
+
+      setIsAnalyzing(true);
+      try {
+        await runStoryAnalysis(project.projectId);
+        setSourceSubmitMessage(
+          `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，故事分析已完成。`
+        );
+      } catch (analysisError) {
+        const message = analysisError instanceof Error ? analysisError.message : "自动故事分析失败";
+        setAnalysisStatus("error");
+        setAnalysisMessage(message);
+        setSourceSubmitMessage(
+          `小说已提交到当前项目，并切分为 ${nextChapters.length} 个章节，但自动分析失败，可点击“执行分析”重试。`
+        );
+        await loadProjectDetail(project.projectId);
+        await refreshProjectList();
+      } finally {
+        setIsAnalyzing(false);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "无法提交小说正文";
       setSourceSubmitMessage(message);
@@ -397,33 +451,7 @@ function App() {
     setAnalysisStatus("");
 
     try {
-      const result = await analyzeStoryAssets(project.projectId);
-      const [entities, events] = await Promise.all([
-        getStoryEntities(project.projectId),
-        getStoryEvents(project.projectId)
-      ]);
-
-      setStoryEntities(entities);
-      setStoryEvents(events);
-      setStoryAssetsMessage("");
-      setStoryEventsMessage("");
-      setAnalysisResult(result);
-      setAnalysisStatus(result.aiSuccess ? "success" : "warning");
-      setAnalysisMessage(
-        `${result.message}，已同步 ${result.entityCount} 个实体和 ${result.eventCount} 个事件。`
-      );
-      try {
-        const scenes = await getProjectOutline(project.projectId);
-        if (scenes.length > 0) {
-          setOutlineScenes(scenes);
-          setOutlineSourceMode("real");
-          setOutlineMessage("已读取真实场景大纲。");
-        }
-      } catch {
-        setOutlineMessage("故事资产已生成，场景大纲稍后会自动加载。");
-      }
-      await loadProjectDetail(project.projectId);
-      await refreshProjectList();
+      await runStoryAnalysis(project.projectId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "无法执行故事资产分析";
       setAnalysisStatus("error");
@@ -1172,10 +1200,10 @@ function App() {
           <button
             className="primary-button"
             type="button"
-            disabled={connectionMode !== "connected" || isSubmittingSource || !sourceTextInput.trim()}
+            disabled={connectionMode !== "connected" || isSubmittingSource || isAnalyzing || !sourceTextInput.trim()}
             onClick={() => void handleSubmitSourceText()}
           >
-            {isSubmittingSource ? "提交中..." : "提交到当前项目"}
+            {isSubmittingSource ? (isAnalyzing ? "分析中..." : "提交中...") : "提交到当前项目"}
           </button>
         </section>
 
