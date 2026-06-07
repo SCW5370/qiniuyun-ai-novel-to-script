@@ -29,14 +29,18 @@ public class WorkflowService {
 
     private final ProjectOperationLock projectOperationLock;
 
+    private final ProgressEventPublisher progressEventPublisher;
+
     public WorkflowService(
             ProjectService projectService,
             SceneGenerationService sceneGenerationService,
-            ProjectOperationLock projectOperationLock
+            ProjectOperationLock projectOperationLock,
+            ProgressEventPublisher progressEventPublisher
     ) {
         this.projectService = projectService;
         this.sceneGenerationService = sceneGenerationService;
         this.projectOperationLock = projectOperationLock;
+        this.progressEventPublisher = progressEventPublisher;
     }
 
     @Transactional
@@ -47,6 +51,7 @@ public class WorkflowService {
     private ValidationReportResponse validateProjectLocked(String projectId) {
         long startedAt = System.currentTimeMillis();
         log.info("开始校验项目: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "validation", "validating", 86, "开始执行结构校验");
         projectService.getProjectEntity(projectId);
         List<OutlineSceneResponse> outline = sceneGenerationService.listOutline(projectId);
         List<ValidationReportResponse.ValidationItemResponse> items = new ArrayList<>();
@@ -54,27 +59,35 @@ public class WorkflowService {
         for (OutlineSceneResponse outlineScene : outline) {
             SceneScriptResponse scene = sceneGenerationService.getSceneScript(projectId, outlineScene.getSceneId());
             if (scene.getAction().isEmpty()) {
-                items.add(new ValidationReportResponse.ValidationItemResponse(
+                ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                         scene.getSceneId(), "error", "action", "Scene 缺少动作描写"
-                ));
+                );
+                items.add(item);
+                progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
             }
             if (scene.getDialogue().isEmpty()) {
-                items.add(new ValidationReportResponse.ValidationItemResponse(
+                ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                         scene.getSceneId(), "warning", "dialogue", "Scene 暂无对白"
-                ));
+                );
+                items.add(item);
+                progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
             }
             Set<String> allowedCharacters = new HashSet<>(outlineScene.getCharacters());
             for (SceneScriptResponse.DialogueResponse dialogue : scene.getDialogue()) {
                 if (!allowedCharacters.isEmpty() && !allowedCharacters.contains(dialogue.characterId())) {
-                    items.add(new ValidationReportResponse.ValidationItemResponse(
+                    ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                             scene.getSceneId(), "warning", "dialogue", "对白角色 " + dialogue.characterId() + " 未出现在场景大纲角色列表中"
-                    ));
+                    );
+                    items.add(item);
+                    progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
                 }
             }
             for (String warning : scene.getWarnings()) {
-                items.add(new ValidationReportResponse.ValidationItemResponse(
+                ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                         scene.getSceneId(), "warning", "warnings", warning
-                ));
+                );
+                items.add(item);
+                progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
             }
         }
 
@@ -87,6 +100,7 @@ public class WorkflowService {
                 items.size(),
                 System.currentTimeMillis() - startedAt
         );
+        progressEventPublisher.jobCompleted(projectId, "validated", 90, false, "结构校验完成，状态：" + status);
         return new ValidationReportResponse(projectId, status, items);
     }
 
@@ -98,6 +112,7 @@ public class WorkflowService {
     private String exportYamlLocked(String projectId) {
         long startedAt = System.currentTimeMillis();
         log.info("开始导出 YAML: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "yaml_export", "exporting", 95, "开始导出 YAML");
         Project project = projectService.getProjectEntity(projectId);
         List<OutlineSceneResponse> outline = sceneGenerationService.listOutline(projectId);
         List<SceneScriptResponse> scenes = new ArrayList<>();
@@ -140,6 +155,7 @@ public class WorkflowService {
                 yamlContent.length(),
                 System.currentTimeMillis() - startedAt
         );
+        progressEventPublisher.jobCompleted(projectId, "completed", 100, true, "YAML 导出完成");
         return yamlContent;
     }
 

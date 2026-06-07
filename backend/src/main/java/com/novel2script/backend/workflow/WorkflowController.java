@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/projects/{projectId}")
@@ -25,9 +24,16 @@ public class WorkflowController {
 
     private final ProjectService projectService;
 
-    public WorkflowController(WorkflowService workflowService, ProjectService projectService) {
+    private final ProgressEventPublisher progressEventPublisher;
+
+    public WorkflowController(
+            WorkflowService workflowService,
+            ProjectService projectService,
+            ProgressEventPublisher progressEventPublisher
+    ) {
         this.workflowService = workflowService;
         this.projectService = projectService;
+        this.progressEventPublisher = progressEventPublisher;
     }
 
     @PostMapping("/validate")
@@ -48,24 +54,6 @@ public class WorkflowController {
     @GetMapping("/events")
     public SseEmitter streamEvents(@PathVariable String projectId) throws IOException {
         Project project = projectService.getProjectEntity(projectId);
-        SseEmitter emitter = new SseEmitter(10_000L);
-        String phase = project.getStatus().name().toLowerCase();
-        emitter.send(SseEmitter.event()
-                .name("phase.changed")
-                .data(Map.of(
-                        "projectId", projectId,
-                        "phase", phase,
-                        "message", "已连接项目进度流"
-                )));
-        emitter.send(SseEmitter.event()
-                .name("job.completed")
-                .data(Map.of(
-                        "projectId", projectId,
-                        "phase", phase,
-                        "progress", 100,
-                        "exportReady", project.getStatus().name().equals("COMPLETED")
-                )));
-        emitter.complete();
-        return emitter;
+        return progressEventPublisher.subscribe(project);
     }
 }

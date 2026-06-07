@@ -3,6 +3,7 @@ package com.novel2script.backend.source;
 import com.novel2script.backend.common.ProjectOperationLock;
 import com.novel2script.backend.project.ProjectService;
 import com.novel2script.backend.source.dto.ChapterResponse;
+import com.novel2script.backend.workflow.ProgressEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -23,16 +24,20 @@ public class ChapterSummaryService {
 
     private final ProjectOperationLock projectOperationLock;
 
+    private final ProgressEventPublisher progressEventPublisher;
+
     public ChapterSummaryService(
             ProjectService projectService,
             SourceChapterMapper sourceChapterMapper,
             ChapterSummaryGenerator chapterSummaryGenerator,
-            ProjectOperationLock projectOperationLock
+            ProjectOperationLock projectOperationLock,
+            ProgressEventPublisher progressEventPublisher
     ) {
         this.projectService = projectService;
         this.sourceChapterMapper = sourceChapterMapper;
         this.chapterSummaryGenerator = chapterSummaryGenerator;
         this.projectOperationLock = projectOperationLock;
+        this.progressEventPublisher = progressEventPublisher;
     }
 
     @Transactional
@@ -43,6 +48,7 @@ public class ChapterSummaryService {
     private List<ChapterResponse> summarizeChaptersLocked(String projectId) {
         long startedAt = System.currentTimeMillis();
         log.info("开始生成章节摘要: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "chapter_summary", "summarizing", 32, "开始生成章节摘要");
         projectService.getProjectEntity(projectId);
         List<SourceChapter> chapters = sourceChapterMapper.findByProjectIdOrderByChapterNoAsc(projectId);
         if (chapters.isEmpty()) {
@@ -59,6 +65,7 @@ public class ChapterSummaryService {
                 chapters.size(),
                 System.currentTimeMillis() - startedAt
         );
+        progressEventPublisher.jobCompleted(projectId, "chaptered", 38, false, "章节摘要生成完成，共 " + chapters.size() + " 章");
 
         return sourceChapterMapper.findByProjectIdOrderByChapterNoAsc(projectId).stream()
                 .map(ChapterResponse::from)

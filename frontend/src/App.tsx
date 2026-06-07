@@ -48,9 +48,15 @@ const phaseKeyToLabel: Record<string, string> = {
   created: "项目创建",
   source_submitted: "文本处理",
   chaptered: "文本处理",
+  summarizing: "文本处理",
+  entity_extracting: "实体抽取",
   entity_ready: "实体抽取",
+  outline_generating: "场景规划",
   outlined: "场景规划",
   scene_generating: "Scene 生成",
+  validating: "结构校验",
+  validated: "结构校验",
+  exporting: "YAML 导出",
   completed: "YAML 导出",
   failed: "Scene 生成"
 };

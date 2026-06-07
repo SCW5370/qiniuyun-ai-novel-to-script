@@ -15,6 +15,7 @@ import com.novel2script.backend.story.StoryEntity;
 import com.novel2script.backend.story.StoryEntityMapper;
 import com.novel2script.backend.story.StoryEvent;
 import com.novel2script.backend.story.StoryEventMapper;
+import com.novel2script.backend.workflow.ProgressEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,7 @@ public class SceneGenerationService {
     private final AiChatClient aiChatClient;
     private final ObjectMapper objectMapper;
     private final ProjectOperationLock projectOperationLock;
+    private final ProgressEventPublisher progressEventPublisher;
 
     public SceneGenerationService(
             ProjectService projectService,
@@ -52,7 +54,8 @@ public class SceneGenerationService {
             SceneScriptMapper sceneScriptMapper,
             AiChatClient aiChatClient,
             ObjectMapper objectMapper,
-            ProjectOperationLock projectOperationLock
+            ProjectOperationLock projectOperationLock,
+            ProgressEventPublisher progressEventPublisher
     ) {
         this.projectService = projectService;
         this.storyEntityMapper = storyEntityMapper;
@@ -62,6 +65,7 @@ public class SceneGenerationService {
         this.aiChatClient = aiChatClient;
         this.objectMapper = objectMapper;
         this.projectOperationLock = projectOperationLock;
+        this.progressEventPublisher = progressEventPublisher;
     }
 
     @Transactional
@@ -112,6 +116,7 @@ public class SceneGenerationService {
     private List<OutlineScene> generateOutline(String projectId) {
         long startedAt = System.currentTimeMillis();
         log.info("开始生成场景大纲: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "outline_generation", "outline_generating", 55, "开始生成场景大纲");
         List<StoryEvent> events = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
         if (events.isEmpty()) {
             throw new IllegalArgumentException("请先执行故事中间资产分析");
@@ -126,11 +131,13 @@ public class SceneGenerationService {
             ));
         } catch (Exception ex) {
             log.warn("AI 场景大纲生成失败，切换规则兜底: projectId={}, reason={}", projectId, rootCauseMessage(ex));
+            progressEventPublisher.phaseChanged(projectId, "outline_generating", 56, "AI 场景大纲生成失败，已切换规则兜底");
             scenes = buildFallbackOutline(projectId, events);
         }
 
         outlineSceneMapper.insertBatch(scenes);
         projectService.updateStatus(projectId, ProjectStatus.OUTLINED);
+        progressEventPublisher.outlineReady(projectId, scenes.size());
         log.info(
                 "场景大纲生成完成: projectId={}, sceneCount={}, elapsedMs={}",
                 projectId,
@@ -143,6 +150,7 @@ public class SceneGenerationService {
     private SceneScript generateSceneScript(String projectId, String sceneId, boolean regenerating) {
         long startedAt = System.currentTimeMillis();
         log.info("开始生成 Scene: projectId={}, sceneId={}, regenerating={}", projectId, sceneId, regenerating);
+        progressEventPublisher.jobStarted(projectId, "scene_generation", "scene_generating", 70, "开始生成 Scene: " + sceneId);
         OutlineScene outlineScene = outlineSceneMapper.findByProjectIdAndSceneId(projectId, sceneId)
                 .orElseGet(() -> {
                     List<OutlineScene> scenes = generateOutline(projectId);
@@ -163,11 +171,13 @@ public class SceneGenerationService {
             ));
         } catch (Exception ex) {
             log.warn("AI Scene 生成失败，切换规则兜底: projectId={}, sceneId={}, reason={}", projectId, sceneId, rootCauseMessage(ex));
+            progressEventPublisher.phaseChanged(projectId, "scene_generating", 72, "AI Scene 生成失败，已切换规则兜底: " + sceneId);
             sceneScript = buildFallbackSceneScript(projectId, outlineScene);
         }
 
         sceneScriptMapper.insert(sceneScript);
         projectService.updateStatus(projectId, ProjectStatus.SCENE_GENERATING);
+        progressEventPublisher.sceneDone(projectId, sceneId, sceneScript.getValidationStatus());
         log.info(
                 "Scene 生成完成: projectId={}, sceneId={}, validationStatus={}, elapsedMs={}",
                 projectId,

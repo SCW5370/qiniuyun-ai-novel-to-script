@@ -10,6 +10,7 @@ import com.novel2script.backend.source.dto.ChapterResponse;
 import com.novel2script.backend.source.dto.SubmitSourceRequest;
 import com.novel2script.backend.story.StoryEntityMapper;
 import com.novel2script.backend.story.StoryEventMapper;
+import com.novel2script.backend.workflow.ProgressEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,8 @@ public class SourceTextService {
 
     private final ProjectOperationLock projectOperationLock;
 
+    private final ProgressEventPublisher progressEventPublisher;
+
     public SourceTextService(
             ProjectService projectService,
             SourceChapterMapper sourceChapterMapper,
@@ -46,7 +49,8 @@ public class SourceTextService {
             OutlineSceneMapper outlineSceneMapper,
             SceneScriptMapper sceneScriptMapper,
             ChapterSplitter chapterSplitter,
-            ProjectOperationLock projectOperationLock
+            ProjectOperationLock projectOperationLock,
+            ProgressEventPublisher progressEventPublisher
     ) {
         this.projectService = projectService;
         this.sourceChapterMapper = sourceChapterMapper;
@@ -56,6 +60,7 @@ public class SourceTextService {
         this.sceneScriptMapper = sceneScriptMapper;
         this.chapterSplitter = chapterSplitter;
         this.projectOperationLock = projectOperationLock;
+        this.progressEventPublisher = progressEventPublisher;
     }
 
     @Transactional
@@ -66,8 +71,10 @@ public class SourceTextService {
     private List<ChapterResponse> submitSourceLocked(String projectId, SubmitSourceRequest request) {
         long startedAt = System.currentTimeMillis();
         log.info("开始提交小说正文: projectId={}", projectId);
+        progressEventPublisher.jobStarted(projectId, "source_submit", "source_submitted", 10, "开始提交小说正文");
         Project project = projectService.getProjectEntity(projectId);
         projectService.updateStatus(projectId, ProjectStatus.SOURCE_SUBMITTED);
+        progressEventPublisher.phaseChanged(projectId, "source_submitted", 18, "小说正文已接收，正在切分章节");
 
         List<ChapterSplitter.ChapterSegment> segments = chapterSplitter.split(request.getContent());
         sceneScriptMapper.deleteByProjectId(projectId);
@@ -90,6 +97,7 @@ public class SourceTextService {
             sourceChapterMapper.insertBatch(chapters);
         }
         projectService.updateStatus(projectId, ProjectStatus.CHAPTERED);
+        progressEventPublisher.jobCompleted(projectId, "chaptered", 30, false, "章节切分完成，共 " + chapters.size() + " 章");
         log.info(
                 "小说正文提交完成: projectId={}, chapterCount={}, elapsedMs={}",
                 projectId,
