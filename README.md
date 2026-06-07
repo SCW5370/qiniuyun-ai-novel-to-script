@@ -508,3 +508,11 @@ git status --short --branch
 ## 许可证与说明
 
 本项目为实训课程项目，用于学习和演示 AI 辅助内容生产工作流。项目中的示例文本和 mock 数据仅用于开发调试，不代表最终商业内容。
+
+## Contributors
+
+Thanks goes to these wonderful people:
+
+<a href="https://github.com/zongzuoscc/ai-novel-to-script/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=zongzuoscc/ai-novel-to-script" />
+</a>
