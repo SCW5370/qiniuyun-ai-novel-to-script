@@ -36,6 +36,12 @@
         order by chapter_no asc
     </select>
 
+    <update id="updateChapterNo">
+        update source_chapters
+        set chapter_no = #{chapterNo}
+        where id = #{id}
+    </update>
+
     <update id="updateSummary">
         update source_chapters
         set summary = #{summary}
