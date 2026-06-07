@@ -39,6 +39,7 @@
 - 已完成项目级 `/events` SSE 进度流接入
 - 已完成 Scene 级 `/scenes/{sceneId}/stream` 流式预览接入
 - 已完成故事资产分析和场景大纲生成的异步任务接口，长篇处理可提交后台任务并通过 SSE 观察进度
+- 已在 Docker Compose 中补充 RabbitMQ management 镜像，作为后续生产级长任务队列基础设施
 - 当前工作台状态：`真实项目管理/正文提交/章节/摘要/实体/事件/场景大纲/Scene 详情/Scene 流式预览/校验/导出/进度 SSE + mock 回退`
 
 ## Next A Line Dependencies

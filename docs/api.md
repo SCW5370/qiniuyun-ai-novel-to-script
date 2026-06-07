@@ -11,6 +11,34 @@
 - AI 配置从本地 `.env` 读取：`AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL_ID`、`AI_TIMEOUT_SECONDS`、`AI_MAX_RETRIES`
 - 小说上传限制从本地 `.env` 读取：`SOURCE_FILE_MAX_MB`、`SOURCE_REQUEST_MAX_MB`
 - 工作流保护配置从本地 `.env` 读取：`WORKFLOW_MAX_AUTO_GENERATE_SCENES`、`OUTLINE_EVENTS_PER_BATCH`
+- RabbitMQ 配置从本地 `.env` 读取：`RABBITMQ_USERNAME`、`RABBITMQ_PASSWORD`、`RABBITMQ_VHOST`、`RABBITMQ_PORT`、`RABBITMQ_MANAGEMENT_PORT`
+
+## 本地中间件
+
+`docker-compose.yml` 当前包含：
+
+| 服务 | 说明 | 默认端口变量 |
+| --- | --- | --- |
+| MySQL | 业务数据库 | `MYSQL_PORT` |
+| Redis | 预留缓存/状态组件 | `REDIS_PORT` |
+| RabbitMQ | 预留长任务消息队列，管理后台使用 management 镜像 | `RABBITMQ_PORT`、`RABBITMQ_MANAGEMENT_PORT` |
+| Adminer | 数据库管理工具 | `ADMINER_PORT` |
+
+`.env` 需要包含 RabbitMQ 变量：
+
+```env
+RABBITMQ_USERNAME=novel2script_mq
+RABBITMQ_PASSWORD=dev_rabbitmq_password
+RABBITMQ_VHOST=novel2script
+RABBITMQ_PORT=5672
+RABBITMQ_MANAGEMENT_PORT=15672
+```
+
+RabbitMQ 管理后台地址：
+
+```text
+http://localhost:15672
+```
 
 ## 通用响应结构
 
