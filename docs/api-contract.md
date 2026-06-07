@@ -63,6 +63,7 @@ Rules:
 - `sceneId` 使用 `S001` 递增格式
 - `seqNo` 为唯一排序依据
 - `status` 枚举：`READY` `GENERATING` `DONE` `WARNING` `FAILED`
+- 后端表 `outline_scenes` 保存的是场景大纲，不保存最终动作和对白；它是后续 `scene_scripts` 生成、排序、校验和导出的上游输入
 
 ## SceneScript
 
@@ -92,6 +93,9 @@ Rules:
 
 Rules:
 
+- 后端表 `scene_scripts` 保存的是已生成的 Scene 级剧本正文
+- Scene 剧本批量生成必须通过 `POST /api/projects/{projectId}/jobs/scenes` 提交 MQ 异步任务
+- MQ 消费端必须按 `outline_scenes.seq_no` 从小到大生成缺失 Scene，保证追加章节和补充前置章节后仍按故事顺序落库
 - `action` 始终为字符串数组
 - `dialogue` 始终为对象数组，不混纯文本
 - `validationStatus` 枚举：`PASSED` `WARNING` `FAILED`
@@ -218,11 +222,12 @@ Rules:
 - `POST /api/projects/{projectId}/jobs/analyze/incremental`
 - `POST /api/projects/{projectId}/jobs/outline`
 - `POST /api/projects/{projectId}/jobs/outline/incremental`
+- `POST /api/projects/{projectId}/jobs/scenes`
 - `GET /api/projects/{projectId}/jobs/{jobId}`
 
 ## Current Integration Status
 
-- 已在 `main` 真实接入：`POST /api/projects`、`GET /api/projects`、`GET /api/projects/{projectId}`、`POST /api/projects/{projectId}/source`、`POST /api/projects/{projectId}/source/upload`、`POST /api/projects/{projectId}/chapters/append`、`GET /api/projects/{projectId}/chapters`、`POST /api/projects/{projectId}/chapters/summarize`、`POST /api/projects/{projectId}/analyze`、`POST /api/projects/{projectId}/analyze/incremental`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`、`GET /api/projects/{projectId}/outline`、`POST /api/projects/{projectId}/outline/incremental`、`GET /api/projects/{projectId}/scenes`、`GET /api/projects/{projectId}/scenes/{sceneId}`、`POST /api/projects/{projectId}/scenes/{sceneId}/regenerate`、`POST /api/projects/{projectId}/validate`、`GET /api/projects/{projectId}/export?format=yaml`、`GET /api/projects/{projectId}/events`、异步长任务 `POST /jobs/*` 与 `GET /jobs/{jobId}`
+- 已在 `main` 真实接入：`POST /api/projects`、`GET /api/projects`、`GET /api/projects/{projectId}`、`POST /api/projects/{projectId}/source`、`POST /api/projects/{projectId}/source/upload`、`POST /api/projects/{projectId}/chapters/append`、`GET /api/projects/{projectId}/chapters`、`POST /api/projects/{projectId}/chapters/summarize`、`POST /api/projects/{projectId}/analyze`、`POST /api/projects/{projectId}/analyze/incremental`、`GET /api/projects/{projectId}/entities`、`GET /api/projects/{projectId}/story-events`、`GET /api/projects/{projectId}/outline`、`POST /api/projects/{projectId}/outline/incremental`、`GET /api/projects/{projectId}/scenes`、`GET /api/projects/{projectId}/scenes/{sceneId}`、`POST /api/projects/{projectId}/scenes/{sceneId}/regenerate`、`POST /api/projects/{projectId}/validate`、`GET /api/projects/{projectId}/export?format=yaml`、`GET /api/projects/{projectId}/events`、异步长任务 `POST /jobs/*`、`POST /jobs/scenes` 与 `GET /jobs/{jobId}`
 - 已在 `main` 前端接入：项目创建、项目列表、正文提交、文件上传、章节追加、章节列表、章节摘要、故事资产全量分析、故事资产增量分析、角色地点面板、故事事件面板、场景大纲、增量场景大纲、Scene 详情、Scene 快捷切换、Scene 重新生成、Scene 流式预览、项目校验、YAML 导出、项目进度 SSE
 - 当前保留的前端策略：真实接口优先，失败时回退 mock，避免联调期阻塞演示
 - 当前 `GET /api/projects/{projectId}/events` 是项目级 SSE 进度流：连接后先发送当前阶段，后续分析、场景生成、校验和导出会推送阶段事件。

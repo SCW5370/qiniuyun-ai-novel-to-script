@@ -8,6 +8,7 @@ import {
   exportProjectYaml,
   generateProjectOutline,
   generateProjectOutlineIncremental,
+  generateProjectSceneScripts,
   getProject,
   getProjectChapters,
   getProjectOutline,
@@ -15,6 +16,7 @@ import {
   getStoryEntities,
   getStoryEvents,
   listProjects,
+  listProjectScenes,
   regenerateProjectScene,
   summarizeProjectChapters,
   submitProjectSource,
@@ -249,6 +251,20 @@ export function useWorkbench() {
     if (events.length > 0 && scenes.length === 0) {
       const job = await generateProjectOutline(targetProjectId);
       setOutlineMessage(`场景大纲任务已提交到 MQ：${job.jobId}`);
+    } else if (scenes.length > 0) {
+      const existingScripts = await getProjectSceneScriptsSafe(targetProjectId);
+      if (existingScripts.length < scenes.length) {
+        const job = await generateProjectSceneScripts(targetProjectId);
+        setSceneDetailMessage(`Scene 剧本生成任务已提交到 MQ：${job.jobId}`);
+      }
+    }
+  }
+
+  async function getProjectSceneScriptsSafe(targetProjectId: string) {
+    try {
+      return await listProjectScenes(targetProjectId);
+    } catch {
+      return [];
     }
   }
 
@@ -484,11 +500,11 @@ export function useWorkbench() {
     }
   }
 
-  function handleStreamScenePreview() {
+  function startScenePreview(sceneId: string) {
     if (
       connectionMode !== "connected" ||
       outlineSourceMode !== "real" ||
-      !selectedSceneId ||
+      !sceneId ||
       isProjectOperationBusy ||
       isStreamingScene
     ) {
@@ -501,7 +517,7 @@ export function useWorkbench() {
 
     const streamUrl = `${appConfig.apiBaseUrl}/projects/${encodeURIComponent(
       project.projectId
-    )}/scenes/${encodeURIComponent(selectedSceneId)}/stream`;
+    )}/scenes/${encodeURIComponent(sceneId)}/stream`;
     const eventSource = new EventSource(streamUrl);
     let closed = false;
 
@@ -543,6 +559,11 @@ export function useWorkbench() {
     });
 
     eventSource.onerror = () => closeStream("AI 流式预览连接已断开。");
+  }
+
+  function handleStreamScenePreview() {
+    if (!selectedSceneId) return;
+    startScenePreview(selectedSceneId);
   }
 
   async function handleValidateProject() {
@@ -802,6 +823,15 @@ export function useWorkbench() {
         }
       } catch (error) {
         if (cancelled) return;
+        if (outlineSourceMode === "real") {
+          setSceneDetail(null);
+          setSceneDetailSourceMode("empty");
+          setSceneDetailMessage(
+            error instanceof Error ? `${error.message}，正在打开 AI 流式预览。` : "Scene 尚未生成，正在打开 AI 流式预览。"
+          );
+          startScenePreview(selectedSceneId);
+          return;
+        }
         if (mockScene) {
           setSceneDetail(mockScene);
           setSceneDetailSourceMode("mock");
@@ -818,7 +848,7 @@ export function useWorkbench() {
     return () => {
       cancelled = true;
     };
-  }, [connectionMode, project.projectId, selectedSceneId, canLoadGeneratedScenes]);
+  }, [connectionMode, project.projectId, selectedSceneId, canLoadGeneratedScenes, outlineSourceMode]);
 
   useEffect(() => {
     if (yamlSourceMode !== "real") {

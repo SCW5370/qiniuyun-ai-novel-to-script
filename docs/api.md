@@ -572,7 +572,9 @@ GET /api/projects/{projectId}/scenes/{sceneId}
 说明：
 
 - 依赖已生成场景大纲。
-- 首次查询某个 `sceneId` 时会生成并保存该 Scene 的动作和对白。
+- 只查询已经生成并保存到 `scene_scripts` 的动作和对白。
+- 如果该 Scene 尚未生成，返回业务错误；前端应显示“Scene 尚未生成”或打开流式预览，不应回退到 mock/default Scene。
+- 批量生成并持久化 Scene 剧本时，调用 `POST /api/projects/{projectId}/jobs/scenes`。
 
 成功响应：
 
@@ -607,7 +609,22 @@ GET /api/projects/{projectId}/scenes
 说明：
 
 - 只返回已经生成并保存过的 Scene 详情。
-- 如果尚未打开过具体 Scene，可能返回空数组。
+- 如果后台 Scene 剧本任务尚未完成，可能只返回部分已生成 Scene 或空数组。
+
+## 提交 Scene 剧本生成任务
+
+```http
+POST /api/projects/{projectId}/jobs/scenes
+```
+
+说明：
+
+- 通过 MQ 异步生成并保存 `scene_scripts`。
+- 依赖 `outline_scenes`，后端会按 `outline_scenes.seq_no` 从小到大生成缺失的 Scene 剧本。
+- 已存在的 Scene 剧本不会重复生成；需要重写单个 Scene 时使用重新生成接口。
+- 任务完成后项目状态更新为 `COMPLETED`，并通过项目 SSE 推送 `job.completed`。
+
+成功响应结构与其他 `POST /jobs/*` 任务一致。
 
 ## 重新生成 Scene
 
