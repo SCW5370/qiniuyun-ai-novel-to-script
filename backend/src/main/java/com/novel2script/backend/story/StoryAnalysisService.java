@@ -98,12 +98,10 @@ public class StoryAnalysisService {
         this.progressEventPublisher = progressEventPublisher;
     }
 
-    @Transactional
     public StoryAnalysisResponse analyze(String projectId) {
         return projectOperationLock.execute(projectId, () -> analyzeLocked(projectId));
     }
 
-    @Transactional
     public StoryAnalysisResponse analyzeIncremental(String projectId) {
         return projectOperationLock.execute(projectId, () -> analyzeIncrementalLocked(projectId));
     }

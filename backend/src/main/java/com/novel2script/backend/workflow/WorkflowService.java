@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -49,7 +48,6 @@ public class WorkflowService {
         this.maxAutoGenerateScenes = Math.max(0, maxAutoGenerateScenes);
     }
 
-    @Transactional
     public ValidationReportResponse validateProject(String projectId, boolean force) {
         return projectOperationLock.execute(projectId, () -> validateProjectLocked(projectId, force));
     }
@@ -111,7 +109,6 @@ public class WorkflowService {
         return new ValidationReportResponse(projectId, status, items);
     }
 
-    @Transactional
     public String exportYaml(String projectId, boolean force) {
         return projectOperationLock.execute(projectId, () -> exportYamlLocked(projectId, force));
     }

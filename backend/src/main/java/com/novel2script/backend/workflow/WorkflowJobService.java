@@ -85,6 +85,16 @@ public class WorkflowJobService {
 
     private WorkflowJobResponse submit(String projectId, String jobType, String submitMessage) {
         projectService.getProjectEntity(projectId);
+        WorkflowJobResponse existingJob = findActiveJob(projectId, jobType);
+        if (existingJob != null) {
+            log.info(
+                    "复用进行中的异步任务: projectId={}, jobId={}, jobType={}",
+                    projectId,
+                    existingJob.getJobId(),
+                    jobType
+            );
+            return existingJob;
+        }
         String jobId = "job_" + UUID.randomUUID().toString().replace("-", "");
         JobState job = new JobState(jobId, projectId, jobType, "QUEUED", submitMessage, LocalDateTime.now(), LocalDateTime.now());
         jobs.put(jobId, job);
@@ -99,6 +109,16 @@ public class WorkflowJobService {
             throw new IllegalStateException("任务投递 MQ 失败: " + message, ex);
         }
         return job.toResponse();
+    }
+
+    private WorkflowJobResponse findActiveJob(String projectId, String jobType) {
+        return jobs.values().stream()
+                .filter(job -> projectId.equals(job.projectId()))
+                .filter(job -> jobType.equals(job.jobType()))
+                .filter(job -> "QUEUED".equals(job.status()) || "RUNNING".equals(job.status()))
+                .findFirst()
+                .map(JobState::toResponse)
+                .orElse(null);
     }
 
     @RabbitListener(queues = "${WORKFLOW_JOB_QUEUE:novel2script.workflow.jobs}")

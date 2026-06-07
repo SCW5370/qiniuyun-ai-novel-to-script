@@ -7,7 +7,6 @@ import com.novel2script.backend.workflow.ProgressEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -40,7 +39,6 @@ public class ChapterSummaryService {
         this.progressEventPublisher = progressEventPublisher;
     }
 
-    @Transactional
     public List<ChapterResponse> summarizeChapters(String projectId) {
         return projectOperationLock.execute(projectId, () -> summarizeChaptersLocked(projectId));
     }
