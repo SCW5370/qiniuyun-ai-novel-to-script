@@ -74,6 +74,17 @@ const analysisModeLabels: Record<string, string> = {
   INCREMENTAL_NONE: "无新增章节"
 };
 
+const projectStatusLabels: Record<string, string> = {
+  CREATED: "已创建",
+  SOURCE_SUBMITTED: "已提交正文",
+  CHAPTERED: "已切章",
+  ENTITY_READY: "资产已就绪",
+  OUTLINED: "已生成场景大纲",
+  SCENE_GENERATING: "正在生成 Scene",
+  COMPLETED: "已完成",
+  FAILED: "处理失败"
+};
+
 const mockOutlineScenes = outlineData as OutlineSceneViewModel[];
 const mockSceneDetails = scenesData as SceneDetailViewModel[];
 const mockSceneMap = Object.fromEntries(mockSceneDetails.map((scene) => [scene.sceneId, scene]));
@@ -152,6 +163,9 @@ function downloadTextFile(filename: string, content: string) {
 }
 
 function App() {
+  const [activeWorkspaceView, setActiveWorkspaceView] = useState<
+    "project" | "assets" | "scenes" | "delivery"
+  >("project");
   const [selectedSceneId, setSelectedSceneId] = useState(mockOutlineScenes[0]?.sceneId ?? "");
   const [projectId, setProjectId] = useState(resolveProjectId);
   const [projectList, setProjectList] = useState<ProjectViewModel[]>([]);
@@ -1188,6 +1202,13 @@ function App() {
     analysisResult?.generationMode == null
       ? ""
       : analysisModeLabels[analysisResult.generationMode] ?? analysisResult.generationMode;
+  const analysisReady =
+    storyEntities.length > 0 ||
+    storyEvents.length > 0 ||
+    project.status === "ENTITY_READY" ||
+    project.status === "OUTLINED" ||
+    project.status === "SCENE_GENERATING" ||
+    project.status === "COMPLETED";
   const selectedSceneIndex = outlineScenes.findIndex((scene) => scene.sceneId === selectedSceneId);
   const previousSceneId = selectedSceneIndex > 0 ? outlineScenes[selectedSceneIndex - 1]?.sceneId ?? "" : "";
   const nextSceneId =
@@ -1230,197 +1251,222 @@ function App() {
   const busyProjectOperationMessage = isProjectOperationBusy
     ? `当前项目正在${busyProjectOperationLabel}，其他写操作已暂时禁用。`
     : "";
+  const projectStatusLabel = projectStatusLabels[project.status] ?? project.status;
+  const currentPhaseLabel = phaseKeyToLabel[project.currentPhase] ?? activePhaseLabel;
+  const analysisStateLabel = analysisModeLabel
+    ? analysisModeLabel
+    : analysisReady
+      ? "分析已完成"
+      : "待执行分析";
+  const chapterSummaryCount = chapters.filter((chapter) => chapter.summary?.trim()).length;
+  const characterCount = storyEntities.filter((entity) => entity.entityType === "CHARACTER").length;
+  const locationCount = storyEntities.filter((entity) => entity.entityType === "LOCATION").length;
+  const totalValidationCount =
+    validationSourceMode === "real"
+      ? validationReportData.items.length
+      : sceneDetail?.warnings.length ?? mockValidationReport.items.length;
+  const currentValidationStatus =
+    validationSourceMode === "real"
+      ? validationReportData.status
+      : sceneDetail?.validationStatus ?? mockValidationReport.status;
+  const sceneSelectionLabel =
+    selectedSceneIndex >= 0 ? `${selectedSceneIndex + 1} / ${outlineScenes.length}` : "未选中";
+  const deliveryStatusLabel =
+    yamlSourceMode === "real"
+      ? "Ready"
+      : projectCompleted && connectionMode === "connected"
+        ? "可导出"
+        : "Pending";
+  const deliveryStatusCaption =
+    yamlSourceMode === "real"
+      ? "真实 YAML 已加载"
+      : projectCompleted && connectionMode === "connected"
+        ? "执行导出即可刷新最终稿"
+        : "YAML 导出链路";
+  const workspaceTabs = [
+    {
+      id: "project" as const,
+      label: "项目",
+      caption: connectionMode === "connected" ? `${chapters.length} 章正文` : "项目与输入"
+    },
+    {
+      id: "assets" as const,
+      label: "资产",
+      caption: connectionMode === "connected" ? `${storyEntities.length + storyEvents.length} 项内容` : "角色、地点、事件"
+    },
+    {
+      id: "scenes" as const,
+      label: "场景",
+      caption: outlineSourceMode === "real" ? `${outlineScenes.length} 场` : "大纲与 Scene"
+    },
+    {
+      id: "delivery" as const,
+      label: "交付",
+      caption:
+        yamlSourceMode === "real"
+          ? "真实导出已就绪"
+          : projectCompleted && connectionMode === "connected"
+            ? "待刷新最终导出"
+            : "校验与 YAML"
+    }
+  ];
+  const activePhaseIndex = Math.max(phaseLabels.indexOf(activePhaseLabel), 0);
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <p className="eyebrow">Novel2Script</p>
-          <h1>AI 小说转剧本工作台</h1>
+        <div className="brand-block">
+          <div className="brand-mark">Novel2Script</div>
+          <div className="brand-copy">
+            <strong>小说转剧本工作台</strong>
+            <span>围绕真实项目、场景生成、校验与导出的连续工作面</span>
+          </div>
         </div>
-        <button
-          className="ghost-button"
-          type="button"
-          disabled={isProjectOperationBusy}
-          onClick={() => void refreshProjectList(projectKeyword)}
-        >
-          刷新项目
-        </button>
+        <div className="topbar-actions">
+          <span
+            className={
+              connectionMode === "connected" ? "status-pill" : "status-pill status-pill-warn"
+            }
+          >
+            {connectionLabel}
+          </span>
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={connectionMode !== "connected" || isProjectOperationBusy}
+            onClick={() => void handleAnalyzeStoryAssets()}
+          >
+            {isAnalyzing ? "分析中..." : "全量分析"}
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={connectionMode !== "connected" || isProjectOperationBusy}
+            onClick={() => void handleAnalyzeStoryAssetsIncremental()}
+          >
+            增量分析
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            disabled={isProjectOperationBusy}
+            onClick={() => void refreshProjectList(projectKeyword)}
+          >
+            刷新项目
+          </button>
+        </div>
       </header>
 
-      <main className="workspace-grid">
-        {/* 对齐开发契约：用户从项目列表选择真实 projectId，不再手动查询数据库或拼 URL。 */}
-        <section className="panel project-entry-panel">
-          <div className="panel-header">
-            <h2>项目入口</h2>
-            <span>{projectList.length} projects</span>
+      <section className="overview-band">
+        <div className="overview-header">
+          <div className="overview-copy">
+            <div className="overview-label-row">
+              <span className="surface-label">当前项目</span>
+              <span className="surface-label surface-label-muted">{project.projectId}</span>
+            </div>
+            <h1>{project.title}</h1>
+            <p>
+              从章节原文到 Scene 级 YAML 导出，将故事资产分析、场景编排、结构校验与最终交付收拢在同一工作流里。
+            </p>
           </div>
-          {busyProjectOperationMessage ? (
-            <div className="notice-banner notice-banner-warning">{busyProjectOperationMessage}</div>
-          ) : null}
-
-          <div className="form-grid">
-            <label className="field-block">
-              <span>新建项目</span>
-              <div className="inline-form">
-                <input
-                  value={projectTitleInput}
-                  onChange={(event) => setProjectTitleInput(event.target.value)}
-                  placeholder="项目标题"
-                />
-                <button
-                  className="ghost-button"
-                  type="button"
-                  disabled={isCreatingProject || isProjectOperationBusy || !projectTitleInput.trim()}
-                  onClick={() => void handleCreateProject()}
-                >
-                  {isCreatingProject ? "创建中..." : "创建"}
-                </button>
-              </div>
-            </label>
-
-            <label className="field-block">
-              <span>搜索项目</span>
-              <div className="inline-form">
-                <input
-                  value={projectKeyword}
-                  onChange={(event) => setProjectKeyword(event.target.value)}
-                  placeholder="标题或 projectId"
-                />
-                <button
-                  className="ghost-button"
-                  type="button"
-                  disabled={isProjectOperationBusy}
-                  onClick={() => void handleSearchProjects()}
-                >
-                  搜索
-                </button>
-              </div>
-            </label>
-          </div>
-
-          {projectActionMessage ? <div className="notice-banner">{projectActionMessage}</div> : null}
-
-          <div className="project-list">
-            {projectList.length === 0 ? (
-              <div className="empty-state empty-state-compact">暂无真实项目。</div>
-            ) : (
-              projectList.map((item) => (
-                <button
-                  key={item.projectId}
-                  className={
-                    item.projectId === project.projectId
-                      ? "project-list-item project-list-item-active"
-                      : "project-list-item"
-                  }
-                  type="button"
-                  disabled={isProjectOperationBusy}
-                  onClick={() => switchProject(item.projectId)}
-                >
-                  <strong>{item.title}</strong>
-                  <span>{item.projectId}</span>
-                  <small>{item.status}</small>
-                </button>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="panel project-panel">
-          <div className="panel-header">
-            <h2>项目概览</h2>
-            <div className="panel-header-actions">
-              <span
-                className={
-                  connectionMode === "connected" ? "status-pill" : "status-pill status-pill-warn"
-                }
-              >
-                {connectionLabel}
-              </span>
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={connectionMode !== "connected" || isProjectOperationBusy}
-                onClick={() => void handleAnalyzeStoryAssets()}
-              >
-                {isAnalyzing ? "分析中..." : "执行全量分析"}
-              </button>
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={connectionMode !== "connected" || isProjectOperationBusy}
-                onClick={() => void handleAnalyzeStoryAssetsIncremental()}
-              >
-                增量分析
-              </button>
+          <div className="overview-side">
+            <div className="overview-state-block">
+              <span className="surface-label">当前状态</span>
+              <strong>{projectStatusLabel}</strong>
+              <span>{currentPhaseLabel}</span>
+            </div>
+            <div className="overview-pill-row">
+              <span className="inline-pill">{outlineSourceMode === "real" ? "真实场景" : "Mock 场景"}</span>
+              <span className="inline-pill">{yamlSourceMode === "real" ? "真实导出" : "预览模式"}</span>
+              <span className="inline-pill">{analysisStateLabel}</span>
             </div>
           </div>
-          {errorMessage ? <div className="notice-banner">{errorMessage}</div> : null}
-          {analysisMessage ? (
-            <div
-              className={
-                analysisStatus === "success"
-                  ? "notice-banner notice-banner-success"
-                  : analysisStatus === "warning"
-                    ? "notice-banner notice-banner-warning"
-                    : "notice-banner"
-              }
-            >
-              <div className="analysis-banner-content">
-                <span>{analysisMessage}</span>
-                {analysisResult ? (
-                  <div className="analysis-pill-row">
-                    <span className="inline-pill">{analysisModeLabel}</span>
-                    <span
-                      className={
-                        analysisResult.aiSuccess
-                          ? "status-pill status-pill-success-strong"
-                          : "status-pill status-pill-warn"
-                      }
-                    >
-                      {analysisResult.aiSuccess ? "AI 成功" : "AI 失败"}
-                    </span>
-                    {analysisResult.fallbackUsed ? (
-                      <span className="status-pill status-pill-warn">已切换兜底</span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-          {completionMessage ? (
-            <div className="notice-banner notice-banner-success">{completionMessage}</div>
-          ) : null}
-          <div className="project-meta">
-            <div>
-              <span>项目 ID</span>
-              <strong>{project.projectId}</strong>
-            </div>
-            <div>
-              <span>当前阶段</span>
-              <strong>{project.currentPhase}</strong>
-            </div>
-            <div>
-              <span>目标交付</span>
-              <strong>Scene 级 YAML</strong>
-            </div>
-            <div>
-              <span>场景数量</span>
-              <strong>{outlineScenes.length}</strong>
-            </div>
-            <div>
-              <span>项目标题</span>
-              <strong>{project.title}</strong>
+        </div>
+        {busyProjectOperationMessage ? (
+          <div className="notice-banner notice-banner-warning">{busyProjectOperationMessage}</div>
+        ) : null}
+        {errorMessage ? <div className="notice-banner">{errorMessage}</div> : null}
+        {analysisMessage ? (
+          <div
+            className={
+              analysisStatus === "success"
+                ? "notice-banner notice-banner-success"
+                : analysisStatus === "warning"
+                  ? "notice-banner notice-banner-warning"
+                  : "notice-banner"
+            }
+          >
+            <div className="analysis-banner-content">
+              <span>{analysisMessage}</span>
+              {analysisResult ? (
+                <div className="analysis-pill-row">
+                  <span className="inline-pill">{analysisModeLabel}</span>
+                  <span
+                    className={
+                      analysisResult.aiSuccess
+                        ? "status-pill status-pill-success-strong"
+                        : "status-pill status-pill-warn"
+                    }
+                  >
+                    {analysisResult.aiSuccess ? "AI 成功" : "AI 失败"}
+                  </span>
+                  {analysisResult.fallbackUsed ? (
+                    <span className="status-pill status-pill-warn">已切换兜底</span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
-        </section>
+        ) : null}
+        {completionMessage ? (
+          <div className="notice-banner notice-banner-success">{completionMessage}</div>
+        ) : null}
 
-        <section className="panel progress-panel">
+        <div className="metric-strip">
+          <article className="metric-card">
+            <span>章节</span>
+            <strong>{chapters.length}</strong>
+            <small>{chapterSummaryCount} 章已生成摘要</small>
+          </article>
+          <article className="metric-card">
+            <span>角色 / 地点</span>
+            <strong>
+              {characterCount} / {locationCount}
+            </strong>
+            <small>故事资产</small>
+          </article>
+          <article className="metric-card">
+            <span>事件</span>
+            <strong>{storyEvents.length}</strong>
+            <small>用于场景编排</small>
+          </article>
+          <article className="metric-card">
+            <span>场景</span>
+            <strong>{outlineScenes.length}</strong>
+            <small>{outlineSourceMode === "real" ? "真实大纲" : "Mock 回退"}</small>
+          </article>
+          <article className="metric-card">
+            <span>校验告警</span>
+            <strong>{totalValidationCount}</strong>
+            <small>{currentValidationStatus}</small>
+          </article>
+          <article className="metric-card">
+            <span>交付状态</span>
+            <strong>{deliveryStatusLabel}</strong>
+            <small>{deliveryStatusCaption}</small>
+          </article>
+        </div>
+
+        <div className="workflow-panel">
           <div className="panel-header">
             <h2>流程阶段</h2>
             <div className="panel-header-actions">
               <span>{displayProgress}%</span>
-              <span className={progressSourceMode === "real" ? "status-pill" : "status-pill status-pill-warn"}>
+              <span
+                className={
+                  progressSourceMode === "real" ? "status-pill" : "status-pill status-pill-warn"
+                }
+              >
                 {progressSourceMode === "real" ? "实时进度" : "静态阶段"}
               </span>
             </div>
@@ -1429,419 +1475,649 @@ function App() {
             <span style={{ width: `${displayProgress}%` }} />
           </div>
           {progressStreamMessage ? <div className="notice-banner">{progressStreamMessage}</div> : null}
-          <ol className="phase-list">
-            {phaseLabels.map((label) => {
-              const isActive = label === activePhaseLabel;
+          <div className="phase-strip">
+            {phaseLabels.map((label, index) => {
+              const state =
+                index < activePhaseIndex
+                  ? "complete"
+                  : index === activePhaseIndex
+                    ? "current"
+                    : "upcoming";
               return (
-                <li key={label} className={isActive ? "phase phase-active" : "phase"}>
-                  <span className="phase-index">
-                    {String(phaseLabels.indexOf(label) + 1).padStart(2, "0")}
-                  </span>
+                <div key={label} className={`phase-chip phase-chip-${state}`}>
+                  <span className="phase-dot" />
                   <span>{label}</span>
-                </li>
+                </div>
               );
             })}
-          </ol>
-        </section>
+          </div>
+        </div>
+      </section>
 
-        <section className="panel chapter-panel">
-          <div className="panel-header">
-            <h2>章节原文</h2>
-            <div className="panel-header-actions">
-              <span>{connectionMode === "connected" ? `${chapters.length} chapters` : disconnectedPanelLabel}</span>
+      <main className="workbench-shell">
+        <aside className="sidebar-stack">
+          {/* 对齐开发契约：用户从项目列表选择真实 projectId，不再手动查询数据库或拼 URL。 */}
+          <section className="panel project-entry-panel">
+            <div className="panel-header">
+              <h2>项目目录</h2>
+              <span>{projectList.length} 个项目</span>
+            </div>
+
+            <div className="form-grid">
+              <label className="field-block">
+                <span>新建项目</span>
+                <div className="inline-form">
+                  <input
+                    value={projectTitleInput}
+                    onChange={(event) => setProjectTitleInput(event.target.value)}
+                    placeholder="项目标题"
+                  />
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    disabled={isCreatingProject || isProjectOperationBusy || !projectTitleInput.trim()}
+                    onClick={() => void handleCreateProject()}
+                  >
+                    {isCreatingProject ? "创建中..." : "创建"}
+                  </button>
+                </div>
+              </label>
+
+              <label className="field-block">
+                <span>搜索项目</span>
+                <div className="inline-form">
+                  <input
+                    value={projectKeyword}
+                    onChange={(event) => setProjectKeyword(event.target.value)}
+                    placeholder="标题或 projectId"
+                  />
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    disabled={isProjectOperationBusy}
+                    onClick={() => void handleSearchProjects()}
+                  >
+                    搜索
+                  </button>
+                </div>
+              </label>
+            </div>
+
+            {projectActionMessage ? <div className="notice-banner">{projectActionMessage}</div> : null}
+
+            <div className="project-list">
+              {projectList.length === 0 ? (
+                <div className="empty-state empty-state-compact">暂无真实项目。</div>
+              ) : (
+                projectList.map((item) => (
+                  <button
+                    key={item.projectId}
+                    className={
+                      item.projectId === project.projectId
+                        ? "project-list-item project-list-item-active"
+                        : "project-list-item"
+                    }
+                    type="button"
+                    disabled={isProjectOperationBusy}
+                    onClick={() => switchProject(item.projectId)}
+                  >
+                    <strong>{item.title}</strong>
+                    <span>{item.projectId}</span>
+                    <small>{projectStatusLabels[item.status] ?? item.status}</small>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* 对齐开发契约：小说正文提交后端 POST /source，由 A 线负责章节切分和入库。 */}
+          <section className="panel source-submit-panel">
+            <div className="panel-header">
+              <h2>正文输入</h2>
+              <span>{sourceTextInput.trim().length} chars</span>
+            </div>
+            {sourceSubmitMessage ? <div className="notice-banner">{sourceSubmitMessage}</div> : null}
+            {connectionMode !== "connected" ? (
+              <div className="notice-banner">请先新建或切换到一个真实项目。</div>
+            ) : null}
+            <textarea
+              className="source-textarea"
+              value={sourceTextInput}
+              onChange={(event) => setSourceTextInput(event.target.value)}
+              disabled={connectionMode !== "connected" || isProjectOperationBusy}
+              placeholder="粘贴 3 章以上小说正文，提交后会自动执行切章与故事分析。"
+            />
+            <div className="source-actions">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceTextInput.trim()}
+                onClick={() => void handleSubmitSourceText()}
+              >
+                {isSubmittingSource ? (isAnalyzing ? "分析中..." : "提交中...") : "替换当前项目正文"}
+              </button>
               <button
                 className="ghost-button"
                 type="button"
-                disabled={connectionMode !== "connected" || chapters.length === 0 || isProjectOperationBusy}
-                onClick={() => void handleSummarizeChapters()}
+                disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceTextInput.trim()}
+                onClick={() => void handleAppendSourceText()}
               >
-                {isSummarizingChapters ? "生成中..." : "生成摘要"}
+                追加文本章节
+              </button>
+              <label className="file-picker">
+                <span>选择文件</span>
+                <input
+                  key={sourceFileInput ? sourceFileInput.name : "empty-source-file"}
+                  type="file"
+                  accept=".txt,.md,text/plain,text/markdown"
+                  disabled={connectionMode !== "connected" || isProjectOperationBusy}
+                  onChange={(event) => {
+                    setSourceFileInput(event.currentTarget.files?.[0] ?? null);
+                  }}
+                />
+              </label>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceFileInput}
+                onClick={() => void handleUploadSourceFile()}
+              >
+                上传文件并替换
+              </button>
+              <button
+                className="ghost-button"
+                type="button"
+                disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceFileInput}
+                onClick={() => void handleAppendSourceFile()}
+              >
+                追加文件章节
               </button>
             </div>
-          </div>
-          {chapterSummaryMessage ? <div className="notice-banner">{chapterSummaryMessage}</div> : null}
-          {connectionMode === "connected" ? (
-            chapters.length > 0 ? (
-              <div className="chapter-list">
-                {chapters.map((chapter) => (
-                  <article key={chapter.id} className="chapter-card">
-                    <div className="chapter-card-top">
-                      <strong>
-                        第 {chapter.chapterNo} 章 {chapter.title}
-                      </strong>
-                      <span>#{chapter.id}</span>
-                    </div>
-                    <p>{chapter.previewText}</p>
-                    {chapter.summary ? (
-                      <div className="chapter-summary">
-                        <span className="detail-label">章节摘要</span>
-                        <p>{chapter.summary}</p>
-                      </div>
-                    ) : null}
-                  </article>
-                ))}
+            {sourceFileInput ? (
+              <div className="source-file-meta">
+                已选择：{sourceFileInput.name} / {Math.ceil(sourceFileInput.size / 1024)} KB
               </div>
-            ) : (
-              <div className="empty-state empty-state-compact">当前项目暂无章节数据。</div>
-            )
-          ) : (
-            <div className="empty-state empty-state-compact">
-              {chapterPanelFallbackMessage}
-            </div>
-          )}
-        </section>
+            ) : null}
+          </section>
+        </aside>
 
-        {/* 对齐开发契约：小说正文提交后端 POST /source，由 A 线负责章节切分和入库。 */}
-        <section className="panel source-submit-panel">
-          <div className="panel-header">
-            <h2>小说提交</h2>
-            <span>{sourceTextInput.trim().length} chars</span>
-          </div>
-          {sourceSubmitMessage ? <div className="notice-banner">{sourceSubmitMessage}</div> : null}
-          {connectionMode !== "connected" ? (
-            <div className="notice-banner">请先在项目入口中新建或选择一个真实项目。</div>
-          ) : null}
-          <textarea
-            className="source-textarea"
-            value={sourceTextInput}
-            onChange={(event) => setSourceTextInput(event.target.value)}
-            disabled={connectionMode !== "connected" || isProjectOperationBusy}
-            placeholder="粘贴小说正文"
-          />
-          <div className="source-actions">
-            <button
-              className="primary-button"
-              type="button"
-              disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceTextInput.trim()}
-              onClick={() => void handleSubmitSourceText()}
-            >
-              {isSubmittingSource ? (isAnalyzing ? "分析中..." : "提交中...") : "替换当前项目正文"}
-            </button>
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceTextInput.trim()}
-              onClick={() => void handleAppendSourceText()}
-            >
-              追加文本章节
-            </button>
-            <label className="file-picker">
-              <span>选择文件</span>
-              <input
-                key={sourceFileInput ? sourceFileInput.name : "empty-source-file"}
-                type="file"
-                accept=".txt,.md,text/plain,text/markdown"
-                disabled={connectionMode !== "connected" || isProjectOperationBusy}
-                onChange={(event) => {
-                  setSourceFileInput(event.currentTarget.files?.[0] ?? null);
-                }}
-              />
-            </label>
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceFileInput}
-              onClick={() => void handleUploadSourceFile()}
-            >
-              上传文件并替换
-            </button>
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={connectionMode !== "connected" || isProjectOperationBusy || !sourceFileInput}
-              onClick={() => void handleAppendSourceFile()}
-            >
-              追加文件章节
-            </button>
-          </div>
-          {sourceFileInput ? (
-            <div className="source-file-meta">
-              已选择：{sourceFileInput.name} / {Math.ceil(sourceFileInput.size / 1024)} KB
-            </div>
-          ) : null}
-        </section>
-
-        <section className="panel asset-panel">
-          <div className="panel-header">
-            <h2>角色与地点</h2>
-            <span>{connectionMode === "connected" ? `${storyEntities.length} assets` : disconnectedPanelLabel}</span>
-          </div>
-          {connectionMode !== "connected" ? (
-            <div className="empty-state empty-state-compact">
-              {assetPanelFallbackMessage}
-            </div>
-          ) : storyAssetsMessage ? (
-            <div className="empty-state empty-state-compact">{storyAssetsMessage}</div>
-          ) : storyEntities.length === 0 ? (
-            <div className="empty-state empty-state-compact">
-              当前项目暂无实体资产，可在后端先执行故事中间资产分析。
-            </div>
-          ) : (
-            <div className="asset-list">
-              {storyEntities.map((entity) => (
-                <article key={entity.entityId} className="asset-card">
-                  <div className="asset-card-top">
-                    <strong>{entity.canonicalName}</strong>
-                    <span>{entity.entityId}</span>
-                  </div>
-                  <div className="pill-list">
-                    <span className="inline-pill">{entity.entityType}</span>
-                    {entity.aliases.map((alias) => (
-                      <span key={`${entity.entityId}-${alias}`} className="inline-pill">
-                        {alias}
-                      </span>
-                    ))}
-                  </div>
-                  <p>{entity.profile}</p>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="panel event-panel">
-          <div className="panel-header">
-            <h2>故事事件</h2>
-            <span>{connectionMode === "connected" ? `${storyEvents.length} events` : disconnectedPanelLabel}</span>
-          </div>
-          {connectionMode !== "connected" ? (
-            <div className="empty-state empty-state-compact">
-              {eventPanelFallbackMessage}
-            </div>
-          ) : storyEventsMessage ? (
-            <div className="empty-state empty-state-compact">{storyEventsMessage}</div>
-          ) : storyEvents.length === 0 ? (
-            <div className="empty-state empty-state-compact">
-              当前项目暂无故事事件，可在后端先执行故事中间资产分析。
-            </div>
-          ) : (
-            <div className="event-list">
-              {storyEvents.map((event) => (
-                <article key={event.eventId} className="event-card">
-                  <div className="event-card-top">
-                    <strong>{event.title}</strong>
-                    <span>{event.eventId}</span>
-                  </div>
-                  <div className="pill-list">
-                    <span className="inline-pill">Chapter {event.chapterId}</span>
-                    <span className="inline-pill">Order {event.eventOrder}</span>
-                    {event.sourceRefs.map((ref) => (
-                      <span key={`${event.eventId}-${ref}`} className="inline-pill">
-                        {ref}
-                      </span>
-                    ))}
-                  </div>
-                  <p>{event.summary}</p>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="panel outline-panel">
-          <div className="panel-header">
-            <h2>场景大纲</h2>
-            <div className="panel-header-actions">
-              <span>{outlineSourceMode === "real" ? `${outlineScenes.length} scenes` : "Mock 回退"}</span>
+        <section className="content-stage">
+          <div className="workspace-tabs" role="tablist" aria-label="工作台视图切换">
+            {workspaceTabs.map((tab) => (
               <button
-                className="ghost-button"
+                key={tab.id}
                 type="button"
-                disabled={connectionMode !== "connected" || isProjectOperationBusy}
-                onClick={() => void handleGenerateIncrementalOutline()}
-              >
-                增量场景
-              </button>
-            </div>
-          </div>
-          {outlineMessage ? <div className="notice-banner">{outlineMessage}</div> : null}
-          {outlineScenes.length === 0 ? (
-            <div className="empty-state empty-state-compact">当前暂无可展示的场景大纲。</div>
-          ) : (
-            <div className="scene-list">
-              {outlineScenes.map((scene) => (
-                <button
-                  key={scene.sceneId}
-                  type="button"
-                  className={
-                    scene.sceneId === selectedSceneId ? "scene-card scene-card-active" : "scene-card"
-                  }
-                  onClick={() => setSelectedSceneId(scene.sceneId)}
-                >
-                  <div className="scene-card-top">
-                    <strong>{scene.title}</strong>
-                    <span>{scene.sceneId}</span>
-                  </div>
-                  <p>{scene.purpose.plot}</p>
-                  <div className="scene-card-tags">
-                    <span>{scene.slugline.intExt}</span>
-                    <span>{scene.slugline.timeOfDay}</span>
-                    <span>{scene.status}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="panel scene-panel">
-          <div className="panel-header">
-            <h2>Scene 详情</h2>
-            <div className="panel-header-actions">
-              <span className="inline-pill">
-                {selectedSceneIndex >= 0 ? `${selectedSceneIndex + 1} / ${outlineScenes.length}` : "未选中"}
-              </span>
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={!previousSceneId || isProjectOperationBusy}
-                onClick={() => setSelectedSceneId(previousSceneId)}
-              >
-                上一场
-              </button>
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={!nextSceneId || isProjectOperationBusy}
-                onClick={() => setSelectedSceneId(nextSceneId)}
-              >
-                下一场
-              </button>
-              <span>{sceneDetail?.validationStatus ?? "未选中"}</span>
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={
-                  connectionMode !== "connected" ||
-                  outlineSourceMode !== "real" ||
-                  !selectedSceneId ||
-                  isProjectOperationBusy
+                className={
+                  activeWorkspaceView === tab.id
+                    ? "workspace-tab workspace-tab-active"
+                    : "workspace-tab"
                 }
-                onClick={() => void handleRegenerateScene()}
+                onClick={() => setActiveWorkspaceView(tab.id)}
               >
-                {isRegeneratingScene ? "生成中..." : "重新生成"}
+                <strong>{tab.label}</strong>
+                <span>{tab.caption}</span>
               </button>
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={
-                  connectionMode !== "connected" ||
-                  outlineSourceMode !== "real" ||
-                  !selectedSceneId ||
-                  isProjectOperationBusy
-                }
-                onClick={() => handleStreamScenePreview()}
-              >
-                {isStreamingScene ? "输出中..." : "流式预览"}
-              </button>
-            </div>
+            ))}
           </div>
-          {sceneDetailMessage ? <div className="notice-banner">{sceneDetailMessage}</div> : null}
-          {sceneStreamMessage ? <div className="notice-banner">{sceneStreamMessage}</div> : null}
-          {sceneFallbackMessage ? (
-            <div className="notice-banner notice-banner-warning">{sceneFallbackMessage}</div>
-          ) : null}
-          {sceneStreamContent ? (
-            <div className="detail-block">
-              <span className="detail-label">AI 流式预览</span>
-              <pre className="code-block">{sceneStreamContent}</pre>
-            </div>
-          ) : null}
-          {sceneDetail ? (
-            <div className="scene-detail">
-              <div className="detail-block">
-                <span className="detail-label">动作</span>
-                <ul className="detail-list">
-                  {sceneDetail.action.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              </div>
 
-              <div className="detail-block">
-                <span className="detail-label">对白</span>
-                <ul className="dialogue-list">
-                  {sceneDetail.dialogue.map((item) => (
-                    <li key={`${item.characterId}-${item.line}`}>
-                      <strong>{item.characterId}</strong>
-                      <span>{item.line}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+          {activeWorkspaceView === "project" ? (
+            <div className="view-grid project-view-grid">
+              <section className="panel status-panel">
+                <div className="panel-header">
+                  <h2>运行快照</h2>
+                  <span>{connectionLabel}</span>
+                </div>
+                <div className="project-meta">
+                  <div>
+                    <span>项目 ID</span>
+                    <strong>{project.projectId}</strong>
+                  </div>
+                  <div>
+                    <span>当前阶段</span>
+                    <strong>{currentPhaseLabel}</strong>
+                  </div>
+                  <div>
+                    <span>目标交付</span>
+                    <strong>Scene 级 YAML</strong>
+                  </div>
+                  <div>
+                    <span>场景来源</span>
+                    <strong>{outlineSourceMode === "real" ? "真实接口" : "Mock 回退"}</strong>
+                  </div>
+                  <div>
+                    <span>导出来源</span>
+                    <strong>{yamlSourceMode === "real" ? "真实导出" : "本地预览"}</strong>
+                  </div>
+                  <div>
+                    <span>当前场景</span>
+                    <strong>{sceneDetail?.title ?? "未选中"}</strong>
+                  </div>
+                </div>
+              </section>
 
-              <div className="detail-block">
-                <span className="detail-label">Source Refs</span>
-                <div className="pill-list">
-                  {sceneDetail.sourceRefs.map((ref) => (
-                    <span key={ref} className="inline-pill">
-                      {ref}
+              <section className="panel chapter-panel">
+                <div className="panel-header">
+                  <h2>章节原文</h2>
+                  <div className="panel-header-actions">
+                    <span>
+                      {connectionMode === "connected"
+                        ? `${chapters.length} 章 / ${chapterSummaryCount} 章有摘要`
+                        : disconnectedPanelLabel}
                     </span>
-                  ))}
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={
+                        connectionMode !== "connected" ||
+                        chapters.length === 0 ||
+                        isProjectOperationBusy
+                      }
+                      onClick={() => void handleSummarizeChapters()}
+                    >
+                      {isSummarizingChapters ? "生成中..." : "生成摘要"}
+                    </button>
+                  </div>
                 </div>
-              </div>
+                {chapterSummaryMessage ? <div className="notice-banner">{chapterSummaryMessage}</div> : null}
+                {connectionMode === "connected" ? (
+                  chapters.length > 0 ? (
+                    <div className="chapter-list">
+                      {chapters.map((chapter) => (
+                        <article key={chapter.id} className="chapter-card">
+                          <div className="chapter-card-top">
+                            <strong>
+                              第 {chapter.chapterNo} 章 {chapter.title}
+                            </strong>
+                            <span>#{chapter.id}</span>
+                          </div>
+                          <p>{chapter.previewText}</p>
+                          {chapter.summary ? (
+                            <div className="chapter-summary">
+                              <span className="detail-label">章节摘要</span>
+                              <p>{chapter.summary}</p>
+                            </div>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty-state empty-state-compact">当前项目暂无章节数据。</div>
+                  )
+                ) : (
+                  <div className="empty-state empty-state-compact">{chapterPanelFallbackMessage}</div>
+                )}
+              </section>
             </div>
-          ) : (
-            <div className="empty-state">
-              {sceneDetailSourceMode === "empty"
-                ? "真实场景大纲已接入，当前仍等待 scenes 详情接口返回该场景内容。"
-                : "未找到当前场景详情。"}
-            </div>
-          )}
-        </section>
-
-        <section className="panel yaml-panel">
-          <div className="panel-header">
-            <h2>YAML 预览</h2>
-            <div className="panel-header-actions">
-              <span>{yamlSourceMode === "real" ? "真实导出" : "Mock 预览"}</span>
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={connectionMode !== "connected" || isProjectOperationBusy}
-                onClick={() => void handleExportYaml()}
-              >
-                {isExportingYaml ? "导出中..." : "导出 YAML"}
-              </button>
-            </div>
-          </div>
-          {yamlPreviewMessage ? <div className="notice-banner">{yamlPreviewMessage}</div> : null}
-          {yamlFallbackMessage ? (
-            <div className="notice-banner notice-banner-warning">{yamlFallbackMessage}</div>
           ) : null}
-          <pre className="code-block">{yamlPreviewContent}</pre>
-        </section>
 
-        <section className="panel validation-panel">
-          <div className="panel-header">
-            <h2>校验报告</h2>
-            <div className="panel-header-actions">
-              <span>{validationSourceMode === "real" ? validationReportData.status : sceneDetail?.validationStatus ?? mockValidationReport.status}</span>
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={connectionMode !== "connected" || outlineSourceMode !== "real" || isProjectOperationBusy}
-                onClick={() => void handleValidateProject()}
-              >
-                {isValidatingProject ? "校验中..." : "执行校验"}
-              </button>
-            </div>
-          </div>
-          {validationMessage ? <div className="notice-banner">{validationMessage}</div> : null}
-          {validationFallbackMessage ? (
-            <div className="notice-banner notice-banner-warning">{validationFallbackMessage}</div>
-          ) : null}
-          <div className="validation-list">
-            {selectedWarnings.length === 0 ? (
-              <div className="validation-item validation-pass">当前场景无告警</div>
-            ) : (
-              selectedWarnings.map((item) => (
-                <div key={`${item.sceneId}-${item.field}`} className="validation-item">
-                  <strong>{item.field}</strong>
-                  <p>{item.message}</p>
+          {activeWorkspaceView === "assets" ? (
+            <div className="view-grid asset-view-grid">
+              <section className="panel asset-panel">
+                <div className="panel-header">
+                  <h2>角色与地点</h2>
+                  <span>
+                    {connectionMode === "connected"
+                      ? `${storyEntities.length} 项资产`
+                      : disconnectedPanelLabel}
+                  </span>
                 </div>
-              ))
-            )}
-          </div>
+                {connectionMode !== "connected" ? (
+                  <div className="empty-state empty-state-compact">{assetPanelFallbackMessage}</div>
+                ) : storyAssetsMessage ? (
+                  <div className="empty-state empty-state-compact">{storyAssetsMessage}</div>
+                ) : storyEntities.length === 0 ? (
+                  <div className="empty-state empty-state-compact">
+                    当前项目暂无实体资产，可先执行故事中间资产分析。
+                  </div>
+                ) : (
+                  <div className="asset-list">
+                    {storyEntities.map((entity) => (
+                      <article key={entity.entityId} className="asset-card">
+                        <div className="asset-card-top">
+                          <strong>{entity.canonicalName}</strong>
+                          <span>{entity.entityId}</span>
+                        </div>
+                        <div className="pill-list">
+                          <span className="inline-pill">{entity.entityType}</span>
+                          {entity.aliases.map((alias) => (
+                            <span key={`${entity.entityId}-${alias}`} className="inline-pill">
+                              {alias}
+                            </span>
+                          ))}
+                        </div>
+                        <p>{entity.profile}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="panel event-panel">
+                <div className="panel-header">
+                  <h2>故事事件</h2>
+                  <span>
+                    {connectionMode === "connected"
+                      ? `${storyEvents.length} 个事件`
+                      : disconnectedPanelLabel}
+                  </span>
+                </div>
+                {connectionMode !== "connected" ? (
+                  <div className="empty-state empty-state-compact">{eventPanelFallbackMessage}</div>
+                ) : storyEventsMessage ? (
+                  <div className="empty-state empty-state-compact">{storyEventsMessage}</div>
+                ) : storyEvents.length === 0 ? (
+                  <div className="empty-state empty-state-compact">
+                    当前项目暂无故事事件，可先执行故事中间资产分析。
+                  </div>
+                ) : (
+                  <div className="event-list">
+                    {storyEvents.map((event) => (
+                      <article key={event.eventId} className="event-card">
+                        <div className="event-card-top">
+                          <strong>{event.title}</strong>
+                          <span>{event.eventId}</span>
+                        </div>
+                        <div className="pill-list">
+                          <span className="inline-pill">Chapter {event.chapterId}</span>
+                          <span className="inline-pill">Order {event.eventOrder}</span>
+                          {event.sourceRefs.map((ref) => (
+                            <span key={`${event.eventId}-${ref}`} className="inline-pill">
+                              {ref}
+                            </span>
+                          ))}
+                        </div>
+                        <p>{event.summary}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          ) : null}
+
+          {activeWorkspaceView === "scenes" ? (
+            <div className="view-grid scene-view-grid">
+              <section className="panel outline-panel">
+                <div className="panel-header">
+                  <h2>场景大纲</h2>
+                  <div className="panel-header-actions">
+                    <span>{outlineSourceMode === "real" ? `${outlineScenes.length} 场` : "Mock 回退"}</span>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={connectionMode !== "connected" || isProjectOperationBusy}
+                      onClick={() => void handleGenerateIncrementalOutline()}
+                    >
+                      增量场景
+                    </button>
+                  </div>
+                </div>
+                {outlineMessage ? <div className="notice-banner">{outlineMessage}</div> : null}
+                {outlineScenes.length === 0 ? (
+                  <div className="empty-state empty-state-compact">当前暂无可展示的场景大纲。</div>
+                ) : (
+                  <div className="scene-list">
+                    {outlineScenes.map((scene) => (
+                      <button
+                        key={scene.sceneId}
+                        type="button"
+                        className={
+                          scene.sceneId === selectedSceneId
+                            ? "scene-card scene-card-active"
+                            : "scene-card"
+                        }
+                        onClick={() => setSelectedSceneId(scene.sceneId)}
+                      >
+                        <div className="scene-card-top">
+                          <strong>{scene.title}</strong>
+                          <span>{scene.sceneId}</span>
+                        </div>
+                        <p>{scene.purpose.plot}</p>
+                        <div className="scene-card-tags">
+                          <span>{scene.slugline.intExt}</span>
+                          <span>{scene.slugline.timeOfDay}</span>
+                          <span>{scene.status}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="panel scene-panel">
+                <div className="panel-header">
+                  <h2>Scene 详情</h2>
+                  <div className="panel-header-actions panel-header-actions-wrap">
+                    <span className="inline-pill">{sceneSelectionLabel}</span>
+                    <span className="inline-pill">{sceneDetail?.validationStatus ?? "未选中"}</span>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={!previousSceneId || isProjectOperationBusy}
+                      onClick={() => setSelectedSceneId(previousSceneId)}
+                    >
+                      上一场
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={!nextSceneId || isProjectOperationBusy}
+                      onClick={() => setSelectedSceneId(nextSceneId)}
+                    >
+                      下一场
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={
+                        connectionMode !== "connected" ||
+                        outlineSourceMode !== "real" ||
+                        !selectedSceneId ||
+                        isProjectOperationBusy
+                      }
+                      onClick={() => void handleRegenerateScene()}
+                    >
+                      {isRegeneratingScene ? "生成中..." : "重新生成"}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={
+                        connectionMode !== "connected" ||
+                        outlineSourceMode !== "real" ||
+                        !selectedSceneId ||
+                        isProjectOperationBusy
+                      }
+                      onClick={() => handleStreamScenePreview()}
+                    >
+                      {isStreamingScene ? "输出中..." : "流式预览"}
+                    </button>
+                  </div>
+                </div>
+                {sceneDetailMessage ? <div className="notice-banner">{sceneDetailMessage}</div> : null}
+                {sceneStreamMessage ? <div className="notice-banner">{sceneStreamMessage}</div> : null}
+                {sceneFallbackMessage ? (
+                  <div className="notice-banner notice-banner-warning">{sceneFallbackMessage}</div>
+                ) : null}
+                {sceneStreamContent ? (
+                  <div className="detail-block">
+                    <span className="detail-label">AI 流式预览</span>
+                    <pre className="code-block">{sceneStreamContent}</pre>
+                  </div>
+                ) : null}
+                {sceneDetail ? (
+                  <div className="scene-detail">
+                    <div className="detail-block">
+                      <span className="detail-label">动作</span>
+                      <ul className="detail-list">
+                        {sceneDetail.action.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="detail-block">
+                      <span className="detail-label">对白</span>
+                      <ul className="dialogue-list">
+                        {sceneDetail.dialogue.map((item) => (
+                          <li key={`${item.characterId}-${item.line}`}>
+                            <strong>{item.characterId}</strong>
+                            <span>{item.line}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="detail-block">
+                      <span className="detail-label">Source Refs</span>
+                      <div className="pill-list">
+                        {sceneDetail.sourceRefs.map((ref) => (
+                          <span key={ref} className="inline-pill">
+                            {ref}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    {sceneDetailSourceMode === "empty"
+                      ? "真实场景大纲已接入，当前仍等待 scenes 详情接口返回该场景内容。"
+                      : "未找到当前场景详情。"}
+                  </div>
+                )}
+              </section>
+
+              <section className="panel validation-panel">
+                <div className="panel-header">
+                  <h2>校验报告</h2>
+                  <div className="panel-header-actions">
+                    <span>{currentValidationStatus}</span>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={
+                        connectionMode !== "connected" ||
+                        outlineSourceMode !== "real" ||
+                        isProjectOperationBusy
+                      }
+                      onClick={() => void handleValidateProject()}
+                    >
+                      {isValidatingProject ? "校验中..." : "执行校验"}
+                    </button>
+                  </div>
+                </div>
+                {validationMessage ? <div className="notice-banner">{validationMessage}</div> : null}
+                {validationFallbackMessage ? (
+                  <div className="notice-banner notice-banner-warning">{validationFallbackMessage}</div>
+                ) : null}
+                <div className="validation-list">
+                  {selectedWarnings.length === 0 ? (
+                    <div className="validation-item validation-pass">当前场景无告警</div>
+                  ) : (
+                    selectedWarnings.map((item) => (
+                      <div key={`${item.sceneId}-${item.field}`} className="validation-item">
+                        <strong>{item.field}</strong>
+                        <p>{item.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {activeWorkspaceView === "delivery" ? (
+            <div className="view-grid delivery-view-grid">
+              <section className="panel yaml-panel">
+                <div className="panel-header">
+                  <h2>YAML 预览</h2>
+                  <div className="panel-header-actions">
+                    <span>{yamlSourceMode === "real" ? "真实导出" : "Mock 预览"}</span>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={connectionMode !== "connected" || isProjectOperationBusy}
+                      onClick={() => void handleExportYaml()}
+                    >
+                      {isExportingYaml ? "导出中..." : "导出 YAML"}
+                    </button>
+                  </div>
+                </div>
+                {yamlPreviewMessage ? <div className="notice-banner">{yamlPreviewMessage}</div> : null}
+                {yamlFallbackMessage ? (
+                  <div className="notice-banner notice-banner-warning">{yamlFallbackMessage}</div>
+                ) : null}
+                <pre className="code-block">{yamlPreviewContent}</pre>
+              </section>
+
+              <section className="panel handoff-panel">
+                <div className="panel-header">
+                  <h2>交付检查</h2>
+                  <span>{projectCompleted ? "已完成" : "进行中"}</span>
+                </div>
+                <div className="checklist-list">
+                  <div className="checklist-item">
+                    <strong>真实项目连接</strong>
+                    <span>{connectionMode === "connected" ? "已连接" : connectionLabel}</span>
+                  </div>
+                  <div className="checklist-item">
+                    <strong>场景大纲</strong>
+                    <span>{outlineSourceMode === "real" ? "真实接口已接入" : "仍在使用 Mock 回退"}</span>
+                  </div>
+                  <div className="checklist-item">
+                    <strong>结构校验</strong>
+                    <span>{currentValidationStatus}</span>
+                  </div>
+                  <div className="checklist-item">
+                    <strong>最终导出</strong>
+                    <span>{yamlSourceMode === "real" ? "可用于评审" : "建议先执行一次导出"}</span>
+                  </div>
+                  <div className="checklist-item">
+                    <strong>兜底内容</strong>
+                    <span>{selectedSceneUsesFallback ? "当前存在规则兜底" : "未检测到当前场景兜底"}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section className="panel validation-panel">
+                <div className="panel-header">
+                  <h2>校验报告</h2>
+                  <div className="panel-header-actions">
+                    <span>{currentValidationStatus}</span>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={
+                        connectionMode !== "connected" ||
+                        outlineSourceMode !== "real" ||
+                        isProjectOperationBusy
+                      }
+                      onClick={() => void handleValidateProject()}
+                    >
+                      {isValidatingProject ? "校验中..." : "执行校验"}
+                    </button>
+                  </div>
+                </div>
+                {validationMessage ? <div className="notice-banner">{validationMessage}</div> : null}
+                {validationFallbackMessage ? (
+                  <div className="notice-banner notice-banner-warning">{validationFallbackMessage}</div>
+                ) : null}
+                <div className="validation-list">
+                  {selectedWarnings.length === 0 ? (
+                    <div className="validation-item validation-pass">当前场景无告警</div>
+                  ) : (
+                    selectedWarnings.map((item) => (
+                      <div key={`${item.sceneId}-${item.field}`} className="validation-item">
+                        <strong>{item.field}</strong>
+                        <p>{item.message}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </div>
+          ) : null}
         </section>
       </main>
     </div>
