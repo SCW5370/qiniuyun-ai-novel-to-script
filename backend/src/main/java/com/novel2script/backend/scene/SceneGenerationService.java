@@ -188,6 +188,23 @@ public class SceneGenerationService {
         return projectOperationLock.execute(projectId, () -> generateMissingSceneScriptsLocked(projectId));
     }
 
+    public boolean hasMissingSceneScripts(String projectId) {
+        Boolean hasMissing = readOnlyTransactionTemplate.execute(status -> {
+            projectService.getProjectEntity(projectId);
+            List<OutlineScene> outlineScenes = outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId);
+            if (outlineScenes.isEmpty()) {
+                return true;
+            }
+            Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
+                    .map(SceneScript::getSceneId)
+                    .collect(java.util.stream.Collectors.toSet());
+            return outlineScenes.stream()
+                    .map(OutlineScene::getSceneId)
+                    .anyMatch(sceneId -> !generatedSceneIds.contains(sceneId));
+        });
+        return Boolean.TRUE.equals(hasMissing);
+    }
+
     private SceneScriptResponse getSceneScriptLocked(String projectId, String sceneId) {
         projectService.getProjectEntity(projectId);
         return sceneScriptMapper.findByProjectIdAndSceneId(projectId, sceneId)

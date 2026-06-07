@@ -72,6 +72,13 @@ public class WorkflowJobService {
     }
 
     public WorkflowJobResponse submitSceneScriptsGeneration(String projectId) {
+        if (!sceneGenerationService.hasMissingSceneScripts(projectId)) {
+            return completedNoop(
+                    projectId,
+                    "scene_scripts_generation_async",
+                    "Scene 剧本已全部生成，无需重复提交 MQ"
+            );
+        }
         return submit(projectId, "scene_scripts_generation_async", "Scene 剧本生成任务已提交到 MQ");
     }
 
@@ -119,6 +126,20 @@ public class WorkflowJobService {
                 .findFirst()
                 .map(JobState::toResponse)
                 .orElse(null);
+    }
+
+    private WorkflowJobResponse completedNoop(String projectId, String jobType, String message) {
+        projectService.getProjectEntity(projectId);
+        LocalDateTime now = LocalDateTime.now();
+        return new WorkflowJobResponse(
+                "job_noop_" + UUID.randomUUID().toString().replace("-", ""),
+                projectId,
+                jobType,
+                "SUCCEEDED",
+                message,
+                now,
+                now
+        );
     }
 
     @RabbitListener(queues = "${WORKFLOW_JOB_QUEUE:novel2script.workflow.jobs}")
