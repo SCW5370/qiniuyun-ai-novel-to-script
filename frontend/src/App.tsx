@@ -120,6 +120,10 @@ ${dialogueLines}
     source_refs: [${sourceRefLines}]`;
 }
 
+function sceneUsesFallback(scene: SceneDetailViewModel | null) {
+  return scene?.warnings.some((message) => message.includes("规则兜底")) ?? false;
+}
+
 function downloadTextFile(filename: string, content: string) {
   const blob = new Blob([content], { type: "text/yaml;charset=utf-8" });
   const objectUrl = URL.createObjectURL(blob);
@@ -485,6 +489,10 @@ function App() {
     let cancelled = false;
 
     async function bootstrapProject() {
+      setAnalysisResult(null);
+      setAnalysisMessage("");
+      setAnalysisStatus("");
+
       try {
         const projects = await listProjects();
 
@@ -853,6 +861,24 @@ function App() {
     analysisResult?.generationMode == null
       ? ""
       : analysisModeLabels[analysisResult.generationMode] ?? analysisResult.generationMode;
+  const projectCompleted = project.status === "COMPLETED";
+  const selectedSceneUsesFallback = sceneUsesFallback(sceneDetail);
+  const completionMessage = projectCompleted
+    ? yamlSourceMode === "real"
+      ? "项目已完成，当前 YAML 为最新真实导出，可直接用于演示或评审。"
+      : "项目已完成，建议执行一次 YAML 导出，刷新当前预览并确认最终交付内容。"
+    : "";
+  const sceneFallbackMessage = selectedSceneUsesFallback
+    ? "当前 Scene 含规则兜底内容，建议在 AI 可用后重新生成，避免直接作为最终稿。"
+    : "";
+  const yamlFallbackMessage =
+    yamlSourceMode === "real" && selectedSceneUsesFallback
+      ? "当前 YAML 已走真实导出链路，但包含规则兜底生成的 Scene 内容。"
+      : "";
+  const validationFallbackMessage =
+    validationSourceMode === "real" && selectedSceneUsesFallback
+      ? "当前校验结果已来自真实接口，但部分告警由规则兜底生成的 Scene 引起。"
+      : "";
 
   return (
     <div className="app-shell">
@@ -996,6 +1022,9 @@ function App() {
                 ) : null}
               </div>
             </div>
+          ) : null}
+          {completionMessage ? (
+            <div className="notice-banner notice-banner-success">{completionMessage}</div>
           ) : null}
           <div className="project-meta">
             <div>
@@ -1239,6 +1268,9 @@ function App() {
             </div>
           </div>
           {sceneDetailMessage ? <div className="notice-banner">{sceneDetailMessage}</div> : null}
+          {sceneFallbackMessage ? (
+            <div className="notice-banner notice-banner-warning">{sceneFallbackMessage}</div>
+          ) : null}
           {sceneDetail ? (
             <div className="scene-detail">
               <div className="detail-block">
@@ -1298,6 +1330,9 @@ function App() {
             </div>
           </div>
           {yamlPreviewMessage ? <div className="notice-banner">{yamlPreviewMessage}</div> : null}
+          {yamlFallbackMessage ? (
+            <div className="notice-banner notice-banner-warning">{yamlFallbackMessage}</div>
+          ) : null}
           <pre className="code-block">{yamlPreviewContent}</pre>
         </section>
 
@@ -1317,6 +1352,9 @@ function App() {
             </div>
           </div>
           {validationMessage ? <div className="notice-banner">{validationMessage}</div> : null}
+          {validationFallbackMessage ? (
+            <div className="notice-banner notice-banner-warning">{validationFallbackMessage}</div>
+          ) : null}
           <div className="validation-list">
             {selectedWarnings.length === 0 ? (
               <div className="validation-item validation-pass">当前场景无告警</div>
