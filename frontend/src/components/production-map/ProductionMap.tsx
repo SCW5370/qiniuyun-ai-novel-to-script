@@ -1,7 +1,8 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Html, Line, OrbitControls, Sparkles } from "@react-three/drei";
-import { useMemo, useRef } from "react";
-import { Color, Group, MOUSE, Vector3 } from "three";
+import { useReducedMotion } from "motion/react";
+import { memo, useMemo, useRef } from "react";
+import { Color, Group, MathUtils, MeshStandardMaterial, MOUSE, Vector3 } from "three";
 import type {
   ChapterViewModel,
   OutlineSceneViewModel,
@@ -13,7 +14,9 @@ type ProductionMapProps = {
   chapters: ChapterViewModel[];
   entities: StoryEntityViewModel[];
   events: StoryEventViewModel[];
+  isSceneBuildActive: boolean;
   scenes: OutlineSceneViewModel[];
+  revealedSceneIds: ReadonlySet<string>;
   selectedSceneId: string;
   setSelectedSceneId: (sceneId: string) => void;
 };
@@ -139,7 +142,10 @@ function buildStorylineGraph({
   });
   chapterNodes.forEach((node) => nodesById.set(node.id, node));
 
-  const eventNodes = events.slice(0, 12).map((event, index) => {
+  const boundedEvents = events.slice(0, 12);
+  // 事件的锚点 X = 关联场景的平均位置。但同一章节的多个事件关联到同一批场景，平均值相同，
+  // 直接渲染就会全叠在一个点上（E6/E7/E9 互相覆盖）。
+  const eventAnchors = boundedEvents.map((event, index) => {
     const chapterNo = chapterNoById.get(event.chapterId);
     const relatedSceneIds = orderedScenes
       .filter((scene) => {
@@ -147,16 +153,42 @@ function buildStorylineGraph({
         return refsOverlap(scene.sourceRefs, event.sourceRefs) || (chapterNo !== undefined && sceneChapterNo === chapterNo);
       })
       .map((scene) => scene.sceneId);
-    const fallbackX = (index - (Math.min(events.length, 12) - 1) / 2) * 0.8;
-    const x = averageSceneX(relatedSceneIds, nodesById, fallbackX) + ((index % 3) - 1) * 0.12;
-    return {
-      id: event.eventId,
-      label: `E${event.eventOrder}`,
-      kind: "event" as const,
-      position: [x, 0.68, -0.75] as [number, number, number],
-      title: event.title
-    };
+    const fallbackX = (index - (Math.max(boundedEvents.length, 1) - 1) / 2) * 0.8;
+    return averageSceneX(relatedSceneIds, nodesById, fallbackX);
   });
+
+  // 按 X 从左到右扫描，强制相邻事件至少间隔 eventMinGap（约一个节点直径），再整体重新居中，
+  // 并对相邻事件做奇偶纵向错位，既保留"事件对齐到所属场景"的语义，又彻底消除堆叠与标签重叠。
+  const eventMinGap = 0.36;
+  const eventBaseY = 0.68;
+  const resolvedEventX: number[] = new Array(boundedEvents.length).fill(0);
+  const resolvedEventY: number[] = new Array(boundedEvents.length).fill(eventBaseY);
+  const sortedEventsByX = eventAnchors
+    .map((anchorX, index) => ({ index, anchorX }))
+    .sort((left, right) => left.anchorX - right.anchorX);
+  let lastEventX = Number.NEGATIVE_INFINITY;
+  sortedEventsByX.forEach((item, rank) => {
+    const x = Math.max(item.anchorX, lastEventX + eventMinGap);
+    resolvedEventX[item.index] = x;
+    resolvedEventY[item.index] = eventBaseY + (rank % 2 === 0 ? 0 : 0.22);
+    lastEventX = x;
+  });
+  if (boundedEvents.length > 0) {
+    const anchorMean = eventAnchors.reduce((total, value) => total + value, 0) / boundedEvents.length;
+    const resolvedMean = resolvedEventX.reduce((total, value) => total + value, 0) / boundedEvents.length;
+    const recenterShift = anchorMean - resolvedMean;
+    for (let i = 0; i < resolvedEventX.length; i++) {
+      resolvedEventX[i] += recenterShift;
+    }
+  }
+
+  const eventNodes = boundedEvents.map((event, index) => ({
+    id: event.eventId,
+    label: `E${event.eventOrder}`,
+    kind: "event" as const,
+    position: [resolvedEventX[index], resolvedEventY[index], -0.75] as [number, number, number],
+    title: event.title
+  }));
   eventNodes.forEach((node) => nodesById.set(node.id, node));
 
   const entityNodes = entities.slice(0, 12).map((entity, index) => {
@@ -298,6 +330,119 @@ function labelClassName(node: MapNode, selected: boolean, inContext: boolean) {
   return classes.join(" ");
 }
 
+function GrowingStorylineLink({
+  from,
+  reducedMotion,
+  to
+}: {
+  from: Vector3;
+  reducedMotion: boolean;
+  to: Vector3;
+}) {
+  const groupRef = useRef<Group>(null);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+    const nextScale = reducedMotion ? 1 : MathUtils.damp(groupRef.current.scale.x, 1, 8, delta);
+    groupRef.current.scale.setScalar(nextScale);
+  });
+
+  return (
+    <group ref={groupRef} position={from} scale={reducedMotion ? 1 : 0.01}>
+      <Line
+        points={[new Vector3(0, 0, 0), to.clone().sub(from)]}
+        color="#2de8ff"
+        lineWidth={1.55}
+        transparent
+        opacity={0.74}
+      />
+    </group>
+  );
+}
+
+function AnimatedMapNode({
+  inContext,
+  isRevealed,
+  node,
+  reducedMotion,
+  selected,
+  setSelectedSceneId
+}: {
+  inContext: boolean;
+  isRevealed: boolean;
+  node: MapNode;
+  reducedMotion: boolean;
+  selected: boolean;
+  setSelectedSceneId: (sceneId: string) => void;
+}) {
+  const groupRef = useRef<Group>(null);
+  const materialRef = useRef<MeshStandardMaterial>(null);
+  const baseScale = nodeScale(node, selected, inContext);
+  const isGhost = node.kind === "scene" && !isRevealed;
+  const targetScale = baseScale * (isGhost ? 0.56 : 1);
+
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      const nextScale = reducedMotion
+        ? targetScale
+        : MathUtils.damp(groupRef.current.scale.x, targetScale, isGhost ? 10 : 7, delta);
+      groupRef.current.scale.setScalar(nextScale);
+    }
+    if (materialRef.current) {
+      const targetOpacity = isGhost ? 0.2 : 1;
+      materialRef.current.opacity = reducedMotion
+        ? targetOpacity
+        : MathUtils.damp(materialRef.current.opacity, targetOpacity, 8, delta);
+      const targetEmissive = isGhost ? 0.08 : selected ? 1.55 : inContext ? 0.78 : 0.36;
+      materialRef.current.emissiveIntensity = reducedMotion
+        ? targetEmissive
+        : MathUtils.damp(materialRef.current.emissiveIntensity, targetEmissive, 8, delta);
+    }
+  });
+
+  const color = isGhost ? "#56616e" : statusColor(node, selected);
+  const labelClasses = [labelClassName(node, selected, inContext)];
+  if (isGhost) labelClasses.push("map-node-label-ghost");
+  if (node.kind === "scene" && isRevealed) labelClasses.push("map-node-label-revealed");
+
+  return (
+    <group ref={groupRef} position={node.position} scale={targetScale}>
+      {selected && isRevealed ? <SelectedSceneHalo /> : null}
+      <mesh
+        onClick={(event) => {
+          event.stopPropagation();
+          if (node.kind === "scene" && isRevealed) setSelectedSceneId(node.id);
+        }}
+      >
+        <sphereGeometry args={[nodeRadius(node), 32, 32]} />
+        <meshStandardMaterial
+          ref={materialRef}
+          color={new Color(color)}
+          emissive={new Color(color)}
+          emissiveIntensity={isGhost ? 0.08 : selected ? 1.55 : inContext ? 0.78 : 0.36}
+          metalness={0.35}
+          opacity={isGhost ? 0.2 : 1}
+          roughness={isGhost ? 0.72 : 0.22}
+          transparent
+        />
+      </mesh>
+      <Html center distanceFactor={8}>
+        <button
+          className={labelClasses.join(" ")}
+          disabled={node.kind !== "scene" || !isRevealed}
+          title={isGhost ? `${node.title ?? node.label}，等待内容生成` : node.title ?? node.label}
+          type="button"
+          onClick={() => {
+            if (node.kind === "scene" && isRevealed) setSelectedSceneId(node.id);
+          }}
+        >
+          {node.label}
+        </button>
+      </Html>
+    </group>
+  );
+}
+
 function SelectedSceneHalo() {
   const groupRef = useRef<Group>(null);
 
@@ -323,24 +468,45 @@ function SelectedSceneHalo() {
 
 function MapScene({
   graph,
+  pendingGapSceneId,
+  revealedSceneIds,
   selectedSceneId,
   setSelectedSceneId
 }: {
   graph: StorylineGraph;
+  pendingGapSceneId: string;
+  revealedSceneIds: ReadonlySet<string>;
   selectedSceneId: string;
   setSelectedSceneId: (sceneId: string) => void;
 }) {
   const nodesById = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
+  const reducedMotion = useReducedMotion() ?? false;
 
   return (
     <group>
       <Sparkles count={70} scale={[7.5, 2.4, 4.2]} size={1.25} speed={0.12} color="#72f6ff" />
       {graph.links.map((link) => {
         const focused = Boolean(selectedSceneId && (link.fromId === selectedSceneId || link.toId === selectedSceneId));
+        const fromNode = nodesById.get(link.fromId);
+        const toNode = nodesById.get(link.toId);
+        const touchesHiddenScene = [fromNode, toNode].some(
+          (node) => node?.kind === "scene" && !revealedSceneIds.has(node.id)
+        );
+        const from = getNodePosition(nodesById, link.fromId);
+        const to = getNodePosition(nodesById, link.toId);
+
+        if (touchesHiddenScene) return null;
+
+        if (link.kind === "storyline") {
+          const grown = Boolean(toNode && revealedSceneIds.has(toNode.id));
+          return grown ? (
+            <GrowingStorylineLink key={link.id} from={from} reducedMotion={reducedMotion} to={to} />
+          ) : null;
+        }
         return (
           <Line
             key={link.id}
-            points={[getNodePosition(nodesById, link.fromId), getNodePosition(nodesById, link.toId)]}
+            points={[from, to]}
             color={linkColor(link.kind, focused)}
             lineWidth={linkWidth(link.kind, focused)}
             transparent
@@ -350,61 +516,59 @@ function MapScene({
       })}
 
       {graph.nodes.map((node) => {
+        if (
+          node.kind === "scene" &&
+          !revealedSceneIds.has(node.id) &&
+          node.id !== pendingGapSceneId
+        ) {
+          return null;
+        }
         const selected = node.id === selectedSceneId;
         const inContext = graph.selectedContextIds.has(node.id);
-        const color = statusColor(node, selected);
+        const isRevealed = node.kind !== "scene" || revealedSceneIds.has(node.id);
         return (
-          <group key={node.id} position={node.position} scale={nodeScale(node, selected, inContext)}>
-            {selected ? <SelectedSceneHalo /> : null}
-            <mesh
-              onClick={(event) => {
-                event.stopPropagation();
-                if (node.kind === "scene") setSelectedSceneId(node.id);
-              }}
-            >
-              <sphereGeometry args={[nodeRadius(node), 32, 32]} />
-              <meshStandardMaterial
-                color={new Color(color)}
-                emissive={new Color(color)}
-                emissiveIntensity={selected ? 1.55 : inContext ? 0.78 : 0.36}
-                metalness={0.35}
-                roughness={0.22}
-              />
-            </mesh>
-            <Html center distanceFactor={8}>
-              <button
-                className={labelClassName(node, selected, inContext)}
-                disabled={node.kind !== "scene"}
-                title={node.title ?? node.label}
-                type="button"
-                onClick={() => {
-                  if (node.kind === "scene") setSelectedSceneId(node.id);
-                }}
-              >
-                {node.label}
-              </button>
-            </Html>
-          </group>
+          <AnimatedMapNode
+            key={node.id}
+            inContext={inContext}
+            isRevealed={isRevealed}
+            node={node}
+            reducedMotion={reducedMotion}
+            selected={selected && isRevealed}
+            setSelectedSceneId={setSelectedSceneId}
+          />
         );
       })}
     </group>
   );
 }
 
-export function ProductionMap(props: ProductionMapProps) {
+function ProductionMapView(props: ProductionMapProps) {
   const graph = useMemo(
     () => resolveSelectedContext(buildStorylineGraph(props), props.selectedSceneId),
     [props.chapters, props.entities, props.events, props.scenes, props.selectedSceneId]
   );
   const sceneNodes = props.scenes.slice().sort((left, right) => left.seqNo - right.seqNo);
+  const lastRevealedIndex = sceneNodes.reduce(
+    (lastIndex, scene, index) => props.revealedSceneIds.has(scene.sceneId) ? index : lastIndex,
+    -1
+  );
+  const pendingGapSceneId =
+    sceneNodes.find((scene, index) => index < lastRevealedIndex && !props.revealedSceneIds.has(scene.sceneId))
+      ?.sceneId ?? "";
 
-  if (sceneNodes.length === 0) {
+  // 只在「完全没有任何素材」时才显示等待态。一旦有章节/角色/事件/场景任意一类落库，
+  // 就先把已有的骨架渲染出来，随后台逐步生成而逐步填充，避免一直停在空白等待页。
+  if (graph.nodes.length === 0) {
     return (
       <div className="production-map-shell production-map-shell-empty">
         <div className="production-map-empty-state">
           <span>Story Production Map</span>
-          <strong>等待真实场景生成</strong>
-          <p>提交小说正文并完成分析后，章节、事件、角色和 Scene 会在这里形成故事线。</p>
+          <strong>{props.isSceneBuildActive ? "正在生成第一个场景" : "等待真实场景生成"}</strong>
+          <p>
+            {props.isSceneBuildActive
+              ? "第一个 Scene 内容完成后，故事线会从这里开始向后生长。"
+              : "提交小说正文后，章节、事件、角色和 Scene 会在这里逐步形成故事线。"}
+          </p>
         </div>
       </div>
     );
@@ -412,6 +576,14 @@ export function ProductionMap(props: ProductionMapProps) {
 
   return (
     <div className="production-map-shell">
+      {props.isSceneBuildActive ? (
+        <div className="production-map-growth-status" role="status">
+          <span aria-hidden="true" />
+          {props.revealedSceneIds.size === 0
+            ? "正在生成第一个 Scene"
+            : `故事线生长中 · ${props.revealedSceneIds.size} 个 Scene 已完成`}
+        </div>
+      ) : null}
       <div className="production-map-legend" aria-hidden="true">
         <span className="legend-spine">Scene 主线</span>
         <span className="legend-source">来源事件</span>
@@ -425,6 +597,8 @@ export function ProductionMap(props: ProductionMapProps) {
           <pointLight position={[-4, 2, -3]} intensity={8} color="#ffb84d" />
           <MapScene
             graph={graph}
+            pendingGapSceneId={pendingGapSceneId}
+            revealedSceneIds={props.revealedSceneIds}
             selectedSceneId={props.selectedSceneId}
             setSelectedSceneId={props.setSelectedSceneId}
           />
@@ -452,27 +626,35 @@ export function ProductionMap(props: ProductionMapProps) {
       </div>
 
       <div className="production-map-mobile">
-        {sceneNodes.map((scene) => (
+        {sceneNodes.filter(
+          (scene) => props.revealedSceneIds.has(scene.sceneId) || scene.sceneId === pendingGapSceneId
+        ).map((scene) => {
+          const isRevealed = props.revealedSceneIds.has(scene.sceneId);
+          return (
           <button
             key={scene.sceneId}
-            className={
-              scene.sceneId === props.selectedSceneId
-                ? "mobile-scene-node mobile-scene-node-active"
-                : "mobile-scene-node"
-            }
+            className={`mobile-scene-node${
+              scene.sceneId === props.selectedSceneId ? " mobile-scene-node-active" : ""
+            }${isRevealed ? " mobile-scene-node-revealed" : " mobile-scene-node-ghost"}`}
+            disabled={!isRevealed}
             type="button"
             onClick={() => props.setSelectedSceneId(scene.sceneId)}
           >
             <span>{String(scene.seqNo).padStart(2, "0")}</span>
             <strong>{scene.title}</strong>
-            <small>{scene.status}</small>
+            <small>{isRevealed ? scene.status : "等待内容"}</small>
             <em className="mobile-scene-meta">
               {scene.sourceRefs[0] ?? "source_pending"} · {scene.characters.length} 角色 ·{" "}
               {scene.slugline.locationId}
             </em>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
+
+// 流式预览每个 chunk 都会刷新工作台 state，但地图依赖的章节/实体/事件/场景在流式期间引用不变，
+// memo 让 Three.js 画布在流式输出时跳过整树重渲染，避免路演现场卡顿。
+export const ProductionMap = memo(ProductionMapView);

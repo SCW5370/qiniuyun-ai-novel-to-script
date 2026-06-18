@@ -25,8 +25,8 @@ spring:
     listener:
       simple:
         acknowledge-mode: auto
-        concurrency: ${WORKFLOW_JOB_CONSUMER_CONCURRENCY:1}
-        max-concurrency: ${WORKFLOW_JOB_CONSUMER_MAX_CONCURRENCY:1}
+        concurrency: ${WORKFLOW_JOB_CONSUMER_CONCURRENCY:4}
+        max-concurrency: ${WORKFLOW_JOB_CONSUMER_MAX_CONCURRENCY:4}
         retry:
           enabled: true
           initial-interval: 2000

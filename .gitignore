@@ -27,6 +27,7 @@ replay_pid*
 # Local environment variables and binary files
 .env
 *.dll
+.DS_Store
 
 # Frontend dependencies and build outputs
 node_modules/

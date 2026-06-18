@@ -157,18 +157,24 @@ public class AiChatClient {
                     .build();
 
             HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() >= 400) {
-                String errorBody = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                String errorBody = boundedResponseBody(response.body());
                 throw new IllegalStateException("AI 流式响应失败: HTTP " + response.statusCode() + " " + errorBody);
             }
 
             readStreamChunks(response.body(), chunkConsumer);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("AI 流式生成被中断", ex);
+        } catch (RuntimeException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new IllegalStateException("AI 流式生成失败", ex);
         }
     }
 
-    private void readStreamChunks(InputStream inputStream, Consumer<String> chunkConsumer) throws Exception {
+    void readStreamChunks(InputStream inputStream, Consumer<String> chunkConsumer) throws Exception {
+        boolean terminalEventReceived = false;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -179,21 +185,38 @@ public class AiChatClient {
                 if ("[DONE]".equals(data)) {
                     return;
                 }
-                String content = extractDeltaContent(data);
-                if (content != null && !content.isEmpty()) {
-                    chunkConsumer.accept(content);
+                if (data.isEmpty()) {
+                    continue;
+                }
+                StreamDelta delta = extractDelta(data);
+                terminalEventReceived = terminalEventReceived || delta.terminal();
+                if (!delta.content().isEmpty()) {
+                    chunkConsumer.accept(delta.content());
                 }
             }
         }
+        if (!terminalEventReceived) {
+            throw new IllegalStateException("AI 流式响应在完成标记前中断");
+        }
     }
 
-    private String extractDeltaContent(String data) {
+    private StreamDelta extractDelta(String data) {
         try {
             JsonNode root = objectMapper.readTree(data);
-            return root.path("choices").path(0).path("delta").path("content").asText("");
+            JsonNode choice = root.path("choices").path(0);
+            String content = choice.path("delta").path("content").asText("");
+            boolean terminal = !choice.path("finish_reason").isMissingNode()
+                    && !choice.path("finish_reason").isNull()
+                    && !choice.path("finish_reason").asText("").isBlank();
+            return new StreamDelta(content, terminal);
         } catch (Exception ex) {
-            return "";
+            throw new IllegalStateException("解析 AI 流式响应片段失败", ex);
         }
+    }
+
+    private String boundedResponseBody(InputStream inputStream) throws Exception {
+        String responseBody = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        return responseBody.length() > 500 ? responseBody.substring(0, 500) : responseBody;
     }
 
     private String extractContent(String responseBody) {
@@ -275,5 +298,8 @@ public class AiChatClient {
             }
         }
         return content;
+    }
+
+    private record StreamDelta(String content, boolean terminal) {
     }
 }

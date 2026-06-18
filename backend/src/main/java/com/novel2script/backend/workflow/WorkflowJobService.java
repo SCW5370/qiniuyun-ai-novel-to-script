@@ -92,7 +92,7 @@ public class WorkflowJobService {
 
     private WorkflowJobResponse submit(String projectId, String jobType, String submitMessage) {
         projectService.getProjectEntity(projectId);
-        WorkflowJobResponse existingJob = findActiveJob(projectId, jobType);
+        WorkflowJobResponse existingJob = findActiveJob(projectId);
         if (existingJob != null) {
             log.info(
                     "复用进行中的异步任务: projectId={}, jobId={}, jobType={}",
@@ -118,10 +118,9 @@ public class WorkflowJobService {
         return job.toResponse();
     }
 
-    private WorkflowJobResponse findActiveJob(String projectId, String jobType) {
+    private WorkflowJobResponse findActiveJob(String projectId) {
         return jobs.values().stream()
                 .filter(job -> projectId.equals(job.projectId()))
-                .filter(job -> jobType.equals(job.jobType()))
                 .filter(job -> "QUEUED".equals(job.status()) || "RUNNING".equals(job.status()))
                 .findFirst()
                 .map(JobState::toResponse)
@@ -196,8 +195,8 @@ public class WorkflowJobService {
         switch (job.jobType()) {
             case "story_analysis_async" -> storyAnalysisService.analyze(job.projectId());
             case "story_analysis_incremental_async" -> storyAnalysisService.analyzeIncremental(job.projectId());
-            case "outline_generation_async" -> sceneGenerationService.listOutline(job.projectId());
-            case "outline_generation_incremental_async" -> sceneGenerationService.generateIncrementalOutline(job.projectId());
+            case "outline_generation_async" -> sceneGenerationService.generateProductionPipeline(job.projectId(), false);
+            case "outline_generation_incremental_async" -> sceneGenerationService.generateProductionPipeline(job.projectId(), true);
             case "scene_scripts_generation_async" -> sceneGenerationService.generateMissingSceneScripts(job.projectId());
             default -> throw new IllegalArgumentException("不支持的任务类型: " + job.jobType());
         }

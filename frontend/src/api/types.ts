@@ -224,6 +224,7 @@ export type ValidationReportViewModel = {
 export type ProgressStreamEventName =
   | "job.started"
   | "phase.changed"
+  | "assets.batch.ready"
   | "outline.ready"
   | "scene.done"
   | "validation.warn"
@@ -237,7 +238,12 @@ export type ProgressStreamPayload = {
   message?: string;
   jobType?: string;
   sceneId?: string;
+  sceneIds?: string[];
   sceneCount?: number;
+  batchSceneCount?: number;
+  chapterNo?: number;
+  entityCount?: number;
+  eventCount?: number;
   validationStatus?: string;
   field?: string;
   exportReady?: boolean;

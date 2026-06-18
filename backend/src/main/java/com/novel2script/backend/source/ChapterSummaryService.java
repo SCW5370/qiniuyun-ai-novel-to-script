@@ -6,9 +6,14 @@ import com.novel2script.backend.source.dto.ChapterResponse;
 import com.novel2script.backend.workflow.ProgressEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 @Service
 public class ChapterSummaryService {
@@ -25,18 +30,22 @@ public class ChapterSummaryService {
 
     private final ProgressEventPublisher progressEventPublisher;
 
+    private final ThreadPoolTaskExecutor chapterSummaryExecutor;
+
     public ChapterSummaryService(
             ProjectService projectService,
             SourceChapterMapper sourceChapterMapper,
             ChapterSummaryGenerator chapterSummaryGenerator,
             ProjectOperationLock projectOperationLock,
-            ProgressEventPublisher progressEventPublisher
+            ProgressEventPublisher progressEventPublisher,
+            @Qualifier("chapterSummaryExecutor") ThreadPoolTaskExecutor chapterSummaryExecutor
     ) {
         this.projectService = projectService;
         this.sourceChapterMapper = sourceChapterMapper;
         this.chapterSummaryGenerator = chapterSummaryGenerator;
         this.projectOperationLock = projectOperationLock;
         this.progressEventPublisher = progressEventPublisher;
+        this.chapterSummaryExecutor = chapterSummaryExecutor;
     }
 
     public List<ChapterResponse> summarizeChapters(String projectId) {
@@ -53,8 +62,21 @@ public class ChapterSummaryService {
             throw new IllegalArgumentException("请先提交小说文本并完成章节切分");
         }
 
+        List<Future<String>> futures = new ArrayList<>(chapters.size());
         for (SourceChapter chapter : chapters) {
-            String summary = chapterSummaryGenerator.generate(chapter);
+            futures.add(chapterSummaryExecutor.submit(() -> chapterSummaryGenerator.generate(chapter)));
+        }
+        for (int i = 0; i < chapters.size(); i++) {
+            SourceChapter chapter = chapters.get(i);
+            String summary;
+            try {
+                summary = futures.get(i).get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("章节摘要生成被中断: projectId=" + projectId, e);
+            } catch (ExecutionException e) {
+                throw new IllegalStateException("章节摘要生成失败: projectId=" + projectId, e.getCause());
+            }
             sourceChapterMapper.updateSummary(chapter.getId(), summary);
         }
         log.info(

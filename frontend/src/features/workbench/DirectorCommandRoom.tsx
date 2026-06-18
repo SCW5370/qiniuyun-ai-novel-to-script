@@ -16,7 +16,9 @@ import {
   Upload,
   Wand2
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
+import { useLayoutEffect, useMemo, useState } from "react";
+import type { SceneDetailViewModel } from "../../api/types";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Panel } from "../../components/ui/Panel";
@@ -30,6 +32,86 @@ function sourceTone(source: string) {
   return "neutral";
 }
 
+function formatElapsed(elapsedMs: number) {
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function TypewrittenSceneContent({ scene }: { scene: SceneDetailViewModel | null }) {
+  const reducedMotion = useReducedMotion() ?? false;
+  const contentLength = useMemo(() => {
+    if (!scene) return 0;
+    return [
+      ...scene.action,
+      ...scene.dialogue.map((item) => `${item.characterId}${item.line}`)
+    ].reduce((total, line) => total + line.length + 1, 0);
+  }, [scene]);
+  const [visibleCharacters, setVisibleCharacters] = useState(contentLength);
+
+  useLayoutEffect(() => {
+    if (!scene || contentLength === 0 || reducedMotion) {
+      setVisibleCharacters(contentLength);
+      return;
+    }
+
+    setVisibleCharacters(0);
+    const step = Math.max(1, Math.ceil(contentLength / 110));
+    const handle = window.setInterval(() => {
+      setVisibleCharacters((current) => {
+        const next = Math.min(contentLength, current + step);
+        if (next >= contentLength) window.clearInterval(handle);
+        return next;
+      });
+    }, 22);
+    return () => window.clearInterval(handle);
+  }, [contentLength, reducedMotion, scene?.sceneId]);
+
+  let remaining = visibleCharacters;
+  const actions = (scene?.action ?? []).map((line) => {
+    const visible = line.slice(0, Math.max(0, remaining));
+    remaining -= line.length + 1;
+    return visible;
+  });
+  const dialogue = (scene?.dialogue ?? []).map((item) => {
+    const speaker = item.characterId.slice(0, Math.max(0, remaining));
+    remaining -= item.characterId.length;
+    const line = item.line.slice(0, Math.max(0, remaining));
+    remaining -= item.line.length + 1;
+    return { line, speaker };
+  });
+
+  return (
+    <div
+      className={`scene-detail-grid${visibleCharacters < contentLength ? " scene-detail-grid-typing" : ""}`}
+      aria-busy={visibleCharacters < contentLength}
+    >
+      <div>
+        <strong>动作</strong>
+        <ul>
+          {actions.slice(0, 5).map((line, index) =>
+            line ? <li key={`${scene?.sceneId}-action-${index}`}>{line}</li> : null
+          )}
+        </ul>
+      </div>
+      <div>
+        <strong>对白</strong>
+        <ul>
+          {dialogue.slice(0, 4).map((item, index) =>
+            item.speaker || item.line ? (
+              <li key={`${scene?.sceneId}-dialogue-${index}`}>
+                {item.speaker ? <span>{item.speaker}</span> : null}
+                {item.line}
+              </li>
+            ) : null
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export function DirectorCommandRoom() {
   const workbench = useWorkbench();
   const { actions, derived, messages, sources, state } = workbench;
@@ -38,6 +120,27 @@ export function DirectorCommandRoom() {
     selectedScene?.title ??
     state.outlineScenes.find((scene) => scene.sceneId === state.selectedSceneId)?.title ??
     "未选中 Scene";
+  const analyzedChapterIds = useMemo(
+    () => new Set(state.storyEvents.map((event) => event.chapterId)),
+    [state.storyEvents]
+  );
+  const visibleMapChapters = useMemo(
+    () => state.chapters.filter((chapter) => analyzedChapterIds.has(chapter.id)),
+    [analyzedChapterIds, state.chapters]
+  );
+  const firstPendingScene = useMemo(
+    () => state.outlineScenes
+      .slice()
+      .sort((left, right) => left.seqNo - right.seqNo)
+      .find((scene) => !state.readySceneIds.has(scene.sceneId)),
+    [state.outlineScenes, state.readySceneIds]
+  );
+  const liveProductionDetail =
+    state.isSceneBuildActive && state.outlineScenes.length > 0
+      ? `已完成 ${state.readySceneIds.size} / ${state.outlineScenes.length} 个 Scene${
+          firstPendingScene ? `，${firstPendingScene.sceneId} 正在生成` : ""
+        }`
+      : "";
 
   return (
     <main className="director-room">
@@ -131,10 +234,21 @@ export function DirectorCommandRoom() {
           <div className="live-operation-copy">
             <strong>{state.workflowNotice?.title ?? "制作任务正在执行"}</strong>
             <span>
-              {state.workflowNotice?.detail ||
+              {liveProductionDetail ||
+                state.workflowNotice?.detail ||
                 messages.progressStreamMessage ||
                 "制作任务正在执行，写操作已暂时锁定。"}
             </span>
+            {state.isWorkflowRunning ? (
+              <>
+                <div className="live-operation-track" role="progressbar" aria-label="任务进行中">
+                  <span className="live-operation-track-fill" />
+                </div>
+                <small>
+                  已用时 {formatElapsed(state.operationElapsedMs)} · AI 处理中，通常需 1–3 分钟，请稍候
+                </small>
+              </>
+            ) : null}
             {state.workflowNotice?.jobId ? <small>Job {state.workflowNotice.jobId}</small> : null}
           </div>
           {state.workflowNotice?.retryAction ? (
@@ -280,9 +394,11 @@ export function DirectorCommandRoom() {
             }
           >
             <ProductionMap
-              chapters={state.chapters}
+              chapters={visibleMapChapters}
               entities={state.storyEntities}
               events={state.storyEvents}
+              isSceneBuildActive={state.isSceneBuildActive}
+              revealedSceneIds={state.revealedSceneIds}
               scenes={state.outlineScenes}
               selectedSceneId={state.selectedSceneId}
               setSelectedSceneId={actions.setSelectedSceneId}
@@ -309,19 +425,6 @@ export function DirectorCommandRoom() {
               >
                 重生成 Scene
               </Button>
-              <Button
-                icon={<Radio size={16} />}
-                loading={state.isStreamingScene}
-                onClick={() => actions.handleStreamScenePreview()}
-                disabled={
-                  state.connectionMode !== "connected" ||
-                  sources.outlineSourceMode !== "real" ||
-                  !state.selectedSceneId ||
-                  state.isProjectOperationBusy
-                }
-              >
-                流式预览
-              </Button>
             </div>
             {messages.outlineMessage ? <p className="console-message">{messages.outlineMessage}</p> : null}
           </Panel>
@@ -347,27 +450,7 @@ export function DirectorCommandRoom() {
               </div>
             ) : null}
 
-            <div className="scene-detail-grid">
-              <div>
-                <strong>动作</strong>
-                <ul>
-                  {(selectedScene?.action ?? []).slice(0, 5).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <strong>对白</strong>
-                <ul>
-                  {(selectedScene?.dialogue ?? []).slice(0, 4).map((item) => (
-                    <li key={`${item.characterId}-${item.line}`}>
-                      <span>{item.characterId}</span>
-                      {item.line}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <TypewrittenSceneContent scene={selectedScene} />
 
             <div className="source-ref-strip">
               {(selectedScene?.sourceRefs ?? []).map((ref) => (

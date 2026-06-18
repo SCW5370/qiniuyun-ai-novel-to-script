@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novel2script.backend.ai.AiChatClient;
+import com.novel2script.backend.ai.AiProperties;
 import com.novel2script.backend.common.ProjectOperationLock;
 import com.novel2script.backend.project.Project;
 import com.novel2script.backend.project.ProjectService;
@@ -18,7 +19,9 @@ import com.novel2script.backend.story.StoryEventMapper;
 import com.novel2script.backend.workflow.ProgressEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -33,7 +36,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class SceneGenerationService {
@@ -58,6 +65,9 @@ public class SceneGenerationService {
     private final TransactionTemplate readOnlyTransactionTemplate;
     private final TransactionTemplate writeTransactionTemplate;
     private final int maxOutlineEventsPerBatch;
+    private final ThreadPoolTaskExecutor sceneStreamExecutor;
+    private final ThreadPoolTaskExecutor sceneScriptExecutor;
+    private final long sceneStreamTimeoutMillis;
 
     public SceneGenerationService(
             ProjectService projectService,
@@ -70,7 +80,11 @@ public class SceneGenerationService {
             ProjectOperationLock projectOperationLock,
             ProgressEventPublisher progressEventPublisher,
             PlatformTransactionManager transactionManager,
-            @Value("${OUTLINE_EVENTS_PER_BATCH:6}") int maxOutlineEventsPerBatch
+            AiProperties aiProperties,
+            @Qualifier("sceneStreamExecutor") ThreadPoolTaskExecutor sceneStreamExecutor,
+            @Qualifier("sceneScriptExecutor") ThreadPoolTaskExecutor sceneScriptExecutor,
+            @Value("${OUTLINE_EVENTS_PER_BATCH:6}") int maxOutlineEventsPerBatch,
+            @Value("${SCENE_STREAM_TIMEOUT_MILLIS:210000}") long configuredSceneStreamTimeoutMillis
     ) {
         this.projectService = projectService;
         this.storyEntityMapper = storyEntityMapper;
@@ -87,6 +101,12 @@ public class SceneGenerationService {
         this.writeTransactionTemplate = new TransactionTemplate(transactionManager);
         this.writeTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.maxOutlineEventsPerBatch = Math.max(1, maxOutlineEventsPerBatch);
+        this.sceneStreamExecutor = sceneStreamExecutor;
+        this.sceneScriptExecutor = sceneScriptExecutor;
+        this.sceneStreamTimeoutMillis = Math.max(
+                configuredSceneStreamTimeoutMillis,
+                (aiProperties.getTimeoutSeconds() + 15L) * 1000L
+        );
     }
 
     public List<OutlineSceneResponse> listOutline(String projectId) {
@@ -103,6 +123,103 @@ public class SceneGenerationService {
 
     public List<OutlineSceneResponse> generateIncrementalOutline(String projectId) {
         return projectOperationLock.execute(projectId, () -> generateIncrementalOutlineLocked(projectId));
+    }
+
+    public List<SceneScriptResponse> generateProductionPipeline(String projectId, boolean incremental) {
+        return projectOperationLock.execute(
+                projectId,
+                () -> generateProductionPipelineLocked(projectId, incremental)
+        );
+    }
+
+    /**
+     * 在上层持有项目操作锁时，为当前已落库但尚未生成大纲的事件启动一批生产任务。
+     * 方法只等待大纲 AI，Scene 内容任务提交到有界线程池后立即返回，使上层可以继续分析下一章。
+     */
+    public ProductionBatchHandle generatePendingProductionBatch(String projectId) {
+        projectService.getProjectEntity(projectId);
+        List<OutlineScene> existingScenes = new ArrayList<>(
+                outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId)
+        );
+        List<StoryEvent> pendingEvents = findPendingOutlineEvents(
+                existingScenes,
+                storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId)
+        );
+        if (pendingEvents.isEmpty()) {
+            return new ProductionBatchHandle(List.of(), List.of());
+        }
+
+        List<StoryEntity> entities = storyEntityMapper.findByProjectId(projectId);
+        Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
+                .map(SceneScript::getSceneId)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Future<SceneScript>> futures = new ArrayList<>();
+        List<String> submittedSceneIds = new ArrayList<>();
+        List<OutlineScene> contextScenes = new ArrayList<>(existingScenes);
+        int nextSeqNo = nextOutlineSeqNo(existingScenes);
+        int nextSceneNo = nextSceneIdSequence(existingScenes);
+
+        for (List<StoryEvent> eventBatch : buildProductionEventBatches(pendingEvents)) {
+            List<OutlineScene> batchScenes = generateOutlineBatchWithSplit(
+                    projectId,
+                    entities,
+                    eventBatch,
+                    contextScenes,
+                    nextSeqNo,
+                    nextSceneNo,
+                    !existingScenes.isEmpty()
+            );
+            persistOutlineBatch(projectId, batchScenes);
+            contextScenes.addAll(batchScenes);
+            nextSeqNo += batchScenes.size();
+            nextSceneNo += batchScenes.size();
+
+            List<String> batchSceneIds = batchScenes.stream().map(OutlineScene::getSceneId).toList();
+            progressEventPublisher.outlineBatchReady(projectId, contextScenes.size(), batchSceneIds);
+            submitSceneGenerationTasks(
+                    projectId,
+                    batchSceneIds,
+                    generatedSceneIds,
+                    futures,
+                    submittedSceneIds
+            );
+        }
+        return new ProductionBatchHandle(submittedSceneIds, futures);
+    }
+
+    public List<SceneScriptResponse> completeProductionBatches(
+            String projectId,
+            List<ProductionBatchHandle> batchHandles
+    ) {
+        List<String> sceneIds = new ArrayList<>();
+        List<Future<SceneScript>> futures = new ArrayList<>();
+        for (ProductionBatchHandle handle : batchHandles) {
+            sceneIds.addAll(handle.sceneIds);
+            futures.addAll(handle.futures);
+        }
+        waitForSceneGenerationTasks(projectId, sceneIds, futures);
+        reconcileOutlineAndSceneScriptOrder(projectId);
+        projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
+        List<SceneScriptResponse> scripts = listSceneScripts(projectId);
+        progressEventPublisher.jobCompleted(
+                projectId,
+                "completed",
+                100,
+                true,
+                "故事资产、场景大纲与 Scene 内容已逐章生成完成"
+        );
+        return scripts;
+    }
+
+    public static final class ProductionBatchHandle {
+
+        private final List<String> sceneIds;
+        private final List<Future<SceneScript>> futures;
+
+        private ProductionBatchHandle(List<String> sceneIds, List<Future<SceneScript>> futures) {
+            this.sceneIds = List.copyOf(sceneIds);
+            this.futures = List.copyOf(futures);
+        }
     }
 
     private List<OutlineSceneResponse> listOutlineLocked(String projectId) {
@@ -222,10 +339,31 @@ public class SceneGenerationService {
             throw new IllegalArgumentException("请先生成场景大纲");
         }
 
-        for (OutlineScene outlineScene : outlineScenes) {
-            boolean exists = sceneScriptMapper.findByProjectIdAndSceneId(projectId, outlineScene.getSceneId()).isPresent();
-            if (!exists) {
-                generateSceneScript(projectId, outlineScene.getSceneId(), false);
+        Set<String> existingSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
+                .map(SceneScript::getSceneId)
+                .collect(java.util.stream.Collectors.toSet());
+        List<String> missingSceneIds = outlineScenes.stream()
+                .map(OutlineScene::getSceneId)
+                .filter(sceneId -> !existingSceneIds.contains(sceneId))
+                .toList();
+
+        // 各场景生成相互独立，用有界线程池并行补齐，把"场景数×单场景耗时"压到接近"单场景耗时×批次"。
+        // 仍按大纲顺序收集结果，任何一个场景失败都让整体失败（与原串行语义一致），不静默吞掉。
+        List<Future<SceneScript>> futures = new ArrayList<>(missingSceneIds.size());
+        for (String sceneId : missingSceneIds) {
+            futures.add(sceneScriptExecutor.submit(() -> generateSceneScript(projectId, sceneId, false)));
+        }
+        for (int i = 0; i < missingSceneIds.size(); i++) {
+            try {
+                futures.get(i).get();
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                futures.forEach(future -> future.cancel(true));
+                throw new IllegalStateException("Scene 剧本生成被中断: projectId=" + projectId + ", sceneId=" + missingSceneIds.get(i), ex);
+            } catch (ExecutionException ex) {
+                Throwable cause = ex.getCause();
+                throw new IllegalStateException("Scene 剧本生成失败: projectId=" + projectId + ", sceneId=" + missingSceneIds.get(i),
+                        cause != null ? cause : ex);
             }
         }
 
@@ -241,54 +379,234 @@ public class SceneGenerationService {
         return scripts;
     }
 
+    private List<SceneScriptResponse> generateProductionPipelineLocked(String projectId, boolean incremental) {
+        long startedAt = System.currentTimeMillis();
+        String jobType = incremental ? "production_pipeline_incremental" : "production_pipeline";
+        progressEventPublisher.jobStarted(
+                projectId,
+                jobType,
+                "outline_generating",
+                55,
+                "开始逐批分析场景，并同步生成 Scene 内容"
+        );
+        projectService.getProjectEntity(projectId);
+
+        List<StoryEvent> allEvents = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
+        if (allEvents.isEmpty()) {
+            throw new IllegalArgumentException("请先执行故事中间资产分析");
+        }
+
+        List<StoryEntity> entities = storyEntityMapper.findByProjectId(projectId);
+        List<OutlineScene> existingScenes = new ArrayList<>(
+                outlineSceneMapper.findByProjectIdOrderBySeqNoAsc(projectId)
+        );
+        List<StoryEvent> eventsToOutline = incremental || !existingScenes.isEmpty()
+                ? findPendingOutlineEvents(existingScenes, allEvents)
+                : allEvents;
+        Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
+                .map(SceneScript::getSceneId)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Future<SceneScript>> sceneFutures = new ArrayList<>();
+        List<String> submittedSceneIds = new ArrayList<>();
+        List<OutlineScene> contextScenes = new ArrayList<>(existingScenes);
+        int nextSeqNo = nextOutlineSeqNo(existingScenes);
+        int nextSceneNo = nextSceneIdSequence(existingScenes);
+
+        for (List<StoryEvent> eventBatch : buildProductionEventBatches(eventsToOutline)) {
+            List<OutlineScene> batchScenes = generateOutlineBatchWithSplit(
+                    projectId,
+                    entities,
+                    eventBatch,
+                    contextScenes,
+                    nextSeqNo,
+                    nextSceneNo,
+                    incremental || !existingScenes.isEmpty()
+            );
+            persistOutlineBatch(projectId, batchScenes);
+            contextScenes.addAll(batchScenes);
+            nextSeqNo += batchScenes.size();
+            nextSceneNo += batchScenes.size();
+
+            List<String> batchSceneIds = batchScenes.stream().map(OutlineScene::getSceneId).toList();
+            progressEventPublisher.outlineBatchReady(projectId, contextScenes.size(), batchSceneIds);
+            submitSceneGenerationTasks(
+                    projectId,
+                    batchSceneIds,
+                    generatedSceneIds,
+                    sceneFutures,
+                    submittedSceneIds
+            );
+        }
+
+        // 支持任务恢复：大纲可能已全部落库，但上次执行在 Scene 内容生成阶段中断。
+        submitSceneGenerationTasks(
+                projectId,
+                contextScenes.stream().map(OutlineScene::getSceneId).toList(),
+                generatedSceneIds,
+                sceneFutures,
+                submittedSceneIds
+        );
+        waitForSceneGenerationTasks(projectId, submittedSceneIds, sceneFutures);
+
+        if (incremental) {
+            reconcileOutlineAndSceneScriptOrder(projectId);
+        }
+        projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
+        List<SceneScriptResponse> scripts = listSceneScripts(projectId);
+        progressEventPublisher.jobCompleted(
+                projectId,
+                "completed",
+                100,
+                true,
+                "场景分析与 Scene 内容已逐批生成完成"
+        );
+        log.info(
+                "场景生产流水线完成: projectId={}, incremental={}, outlineCount={}, scriptCount={}, elapsedMs={}",
+                projectId,
+                incremental,
+                contextScenes.size(),
+                scripts.size(),
+                System.currentTimeMillis() - startedAt
+        );
+        return scripts;
+    }
+
+    private void persistOutlineBatch(String projectId, List<OutlineScene> batchScenes) {
+        if (batchScenes.isEmpty()) {
+            return;
+        }
+        writeTransactionTemplate.executeWithoutResult(status -> outlineSceneMapper.insertBatch(batchScenes));
+        projectService.updateStatus(projectId, ProjectStatus.SCENE_GENERATING);
+    }
+
+    private void submitSceneGenerationTasks(
+            String projectId,
+            List<String> sceneIds,
+            Set<String> generatedSceneIds,
+            List<Future<SceneScript>> futures,
+            List<String> submittedSceneIds
+    ) {
+        for (String sceneId : sceneIds) {
+            if (!generatedSceneIds.add(sceneId)) {
+                continue;
+            }
+            futures.add(sceneScriptExecutor.submit(() -> generateSceneScript(projectId, sceneId, false)));
+            submittedSceneIds.add(sceneId);
+        }
+    }
+
+    private void waitForSceneGenerationTasks(
+            String projectId,
+            List<String> sceneIds,
+            List<Future<SceneScript>> futures
+    ) {
+        for (int i = 0; i < futures.size(); i++) {
+            try {
+                futures.get(i).get();
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                futures.forEach(future -> future.cancel(true));
+                throw new IllegalStateException(
+                        "Scene 生产流水线被中断: projectId=" + projectId + ", sceneId=" + sceneIds.get(i),
+                        ex
+                );
+            } catch (ExecutionException ex) {
+                Throwable cause = ex.getCause();
+                throw new IllegalStateException(
+                        "Scene 生产流水线失败: projectId=" + projectId + ", sceneId=" + sceneIds.get(i),
+                        cause != null ? cause : ex
+                );
+            }
+        }
+    }
+
     public SceneScriptResponse regenerateSceneScript(String projectId, String sceneId) {
         return projectOperationLock.execute(projectId, () -> regenerateSceneScriptLocked(projectId, sceneId));
     }
 
     public SseEmitter streamScenePreview(String projectId, String sceneId) {
-        SseEmitter emitter = new SseEmitter(120_000L);
-        CompletableFuture.runAsync(() -> {
-            try {
-                SceneStreamContext context = projectOperationLock.execute(projectId, () -> buildSceneStreamContext(projectId, sceneId));
-                if (!sendStreamEvent(emitter, "started", Map.of(
-                        "projectId", projectId,
-                        "sceneId", sceneId,
-                        "message", "开始流式生成 Scene 预览"
-                ))) {
-                    return;
-                }
-
-                aiChatClient.streamText(
-                        "你是专业剧本写作助手。请按影视剧本风格输出，不要返回 JSON。",
-                        buildScenePreviewPrompt(context.project(), context.outlineScene(), context.entities(), context.events()),
-                        chunk -> {
-                            if (!sendStreamEvent(emitter, "chunk", Map.of(
-                                    "projectId", projectId,
-                                    "sceneId", sceneId,
-                                    "content", chunk
-                            ))) {
-                                throw new StreamClientDisconnectedException();
-                            }
-                        }
-                );
-
-                sendStreamEvent(emitter, "done", Map.of(
-                        "projectId", projectId,
-                        "sceneId", sceneId,
-                        "message", "Scene 预览流式生成完成"
-                ));
-                emitter.complete();
-            } catch (StreamClientDisconnectedException ex) {
-                completeQuietly(emitter);
-            } catch (Exception ex) {
-                sendStreamEvent(emitter, "failed", Map.of(
-                        "projectId", projectId,
-                        "sceneId", sceneId,
-                        "message", rootCauseMessage(ex)
-                ));
-                completeQuietly(emitter);
+        SseEmitter emitter = new SseEmitter(sceneStreamTimeoutMillis);
+        AtomicBoolean terminal = new AtomicBoolean(false);
+        AtomicReference<Future<?>> taskReference = new AtomicReference<>();
+        Runnable cancelTask = () -> {
+            if (!terminal.compareAndSet(false, true)) {
+                return;
             }
-        });
+            Future<?> task = taskReference.get();
+            if (task != null) {
+                task.cancel(true);
+            }
+        };
+        emitter.onTimeout(cancelTask);
+        emitter.onError(ignored -> cancelTask.run());
+        emitter.onCompletion(cancelTask);
+
+        try {
+            Future<?> task = sceneStreamExecutor.submit(() -> {
+                try {
+                    SceneStreamContext context = projectOperationLock.execute(
+                            projectId,
+                            () -> buildSceneStreamContext(projectId, sceneId)
+                    );
+                    if (!sendStreamEvent(emitter, "started", Map.of(
+                            "projectId", projectId,
+                            "sceneId", sceneId,
+                            "message", "开始流式生成 Scene 预览"
+                    ))) {
+                        return;
+                    }
+
+                    aiChatClient.streamText(
+                            "你是专业剧本写作助手。请按影视剧本风格输出，不要返回 JSON。",
+                            buildScenePreviewPrompt(context.project(), context.outlineScene(), context.entities(), context.events()),
+                            chunk -> {
+                                if (!sendStreamEvent(emitter, "chunk", Map.of(
+                                        "projectId", projectId,
+                                        "sceneId", sceneId,
+                                        "content", chunk
+                                ))) {
+                                    throw new StreamClientDisconnectedException();
+                                }
+                            }
+                    );
+
+                    if (!terminal.compareAndSet(false, true)) {
+                        return;
+                    }
+                    sendStreamEvent(emitter, "done", Map.of(
+                            "projectId", projectId,
+                            "sceneId", sceneId,
+                            "message", "Scene 预览流式生成完成"
+                    ));
+                    emitter.complete();
+                } catch (StreamClientDisconnectedException ex) {
+                    terminal.set(true);
+                    completeQuietly(emitter);
+                } catch (Exception ex) {
+                    if (!terminal.compareAndSet(false, true)) {
+                        return;
+                    }
+                    sendStreamEvent(emitter, "failed", Map.of(
+                            "projectId", projectId,
+                            "sceneId", sceneId,
+                            "message", rootCauseMessage(ex)
+                    ));
+                    completeQuietly(emitter);
+                }
+            });
+            taskReference.set(task);
+            if (terminal.get()) {
+                task.cancel(true);
+            }
+        } catch (RejectedExecutionException ex) {
+            terminal.set(true);
+            sendStreamEvent(emitter, "failed", Map.of(
+                    "projectId", projectId,
+                    "sceneId", sceneId,
+                    "message", "当前流式生成任务较多，请稍后重试"
+            ));
+            completeQuietly(emitter);
+        }
         return emitter;
     }
 
@@ -308,8 +626,8 @@ public class SceneGenerationService {
                             .findFirst()
                             .orElseThrow(() -> new IllegalArgumentException("场景不存在: " + sceneId));
                 });
-        List<StoryEntity> entities = storyEntityMapper.findByProjectId(projectId);
-        List<StoryEvent> events = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
+        List<StoryEntity> entities = filterSceneEntities(outlineScene, storyEntityMapper.findByProjectId(projectId));
+        List<StoryEvent> events = filterSceneEvents(outlineScene, storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId));
         return new SceneStreamContext(project, outlineScene, entities, events);
     }
 
@@ -387,9 +705,9 @@ public class SceneGenerationService {
                 });
 
         Project project = projectService.getProjectEntity(projectId);
-        List<StoryEntity> entities = storyEntityMapper.findByProjectId(projectId);
-        List<StoryEvent> events = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
-        log.debug("Scene 生成上下文读取完成: projectId={}, sceneId={}", projectId, sceneId);
+        List<StoryEntity> entities = filterSceneEntities(outlineScene, storyEntityMapper.findByProjectId(projectId));
+        List<StoryEvent> events = filterSceneEvents(outlineScene, storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId));
+        log.debug("Scene 生成上下文读取完成: projectId={}, sceneId={}, entityCount={}, eventCount={}", projectId, sceneId, entities.size(), events.size());
         return new SceneGenerationContext(project, outlineScene, entities, events);
     }
 
@@ -409,6 +727,35 @@ public class SceneGenerationService {
             return current.getClass().getSimpleName();
         }
         return message.length() > 160 ? message.substring(0, 160) : message;
+    }
+
+    // 单个 Scene 只需要它自己引用的角色/地点和来源章节事件。把全项目上下文裁剪到这个范围，
+    // 可以显著降低输入 token、首 token 等待和费用，同时更贴合"严格围绕场景大纲生成"的约束。
+    // 任何一步裁剪为空时回退到全量，避免上下文缺失影响生成质量。
+    private List<StoryEntity> filterSceneEntities(OutlineScene outlineScene, List<StoryEntity> allEntities) {
+        Set<String> wantedIds = new LinkedHashSet<>(readStringList(outlineScene.getCharactersJson()));
+        String locationId = outlineScene.getLocationId();
+        if (locationId != null && !locationId.isBlank()) {
+            wantedIds.add(locationId.trim());
+        }
+        if (wantedIds.isEmpty()) {
+            return allEntities;
+        }
+        List<StoryEntity> relevant = allEntities.stream()
+                .filter(entity -> wantedIds.contains(entity.getEntityId()))
+                .toList();
+        return relevant.isEmpty() ? allEntities : relevant;
+    }
+
+    private List<StoryEvent> filterSceneEvents(OutlineScene outlineScene, List<StoryEvent> allEvents) {
+        Set<String> sceneRefs = new LinkedHashSet<>(readStringList(outlineScene.getSourceRefsJson()));
+        if (sceneRefs.isEmpty()) {
+            return allEvents;
+        }
+        List<StoryEvent> relevant = allEvents.stream()
+                .filter(event -> readStringList(event.getSourceRefsJson()).stream().anyMatch(sceneRefs::contains))
+                .toList();
+        return relevant.isEmpty() ? allEvents : relevant;
     }
 
     private List<StoryEvent> findPendingOutlineEvents(List<OutlineScene> existingScenes, List<StoryEvent> events) {
@@ -557,6 +904,18 @@ public class SceneGenerationService {
     private List<List<StoryEvent>> buildEventBatches(List<StoryEvent> events) {
         List<List<StoryEvent>> batches = new ArrayList<>();
         for (int i = 0; i < events.size(); i += maxOutlineEventsPerBatch) {
+            batches.add(events.subList(i, Math.min(i + maxOutlineEventsPerBatch, events.size())));
+        }
+        return batches;
+    }
+
+    private List<List<StoryEvent>> buildProductionEventBatches(List<StoryEvent> events) {
+        if (events.isEmpty()) {
+            return List.of();
+        }
+        List<List<StoryEvent>> batches = new ArrayList<>();
+        batches.add(events.subList(0, 1));
+        for (int i = 1; i < events.size(); i += maxOutlineEventsPerBatch) {
             batches.add(events.subList(i, Math.min(i + maxOutlineEventsPerBatch, events.size())));
         }
         return batches;

@@ -7,6 +7,7 @@ import com.novel2script.backend.common.ProjectOperationLock;
 import com.novel2script.backend.project.ProjectService;
 import com.novel2script.backend.project.ProjectStatus;
 import com.novel2script.backend.scene.OutlineSceneMapper;
+import com.novel2script.backend.scene.SceneGenerationService;
 import com.novel2script.backend.scene.SceneScriptMapper;
 import com.novel2script.backend.source.SourceChapter;
 import com.novel2script.backend.source.SourceChapterMapper;
@@ -66,6 +67,8 @@ public class StoryAnalysisService {
 
     private final SceneScriptMapper sceneScriptMapper;
 
+    private final SceneGenerationService sceneGenerationService;
+
     private final AiStoryAssetExtractor aiStoryAssetExtractor;
 
     private final ObjectMapper objectMapper;
@@ -81,6 +84,7 @@ public class StoryAnalysisService {
             StoryEventMapper storyEventMapper,
             OutlineSceneMapper outlineSceneMapper,
             SceneScriptMapper sceneScriptMapper,
+            SceneGenerationService sceneGenerationService,
             AiStoryAssetExtractor aiStoryAssetExtractor,
             ObjectMapper objectMapper,
             ProjectOperationLock projectOperationLock,
@@ -92,6 +96,7 @@ public class StoryAnalysisService {
         this.storyEventMapper = storyEventMapper;
         this.outlineSceneMapper = outlineSceneMapper;
         this.sceneScriptMapper = sceneScriptMapper;
+        this.sceneGenerationService = sceneGenerationService;
         this.aiStoryAssetExtractor = aiStoryAssetExtractor;
         this.objectMapper = objectMapper;
         this.projectOperationLock = projectOperationLock;
@@ -99,11 +104,99 @@ public class StoryAnalysisService {
     }
 
     public StoryAnalysisResponse analyze(String projectId) {
-        return projectOperationLock.execute(projectId, () -> analyzeLocked(projectId));
+        return projectOperationLock.execute(projectId, () -> analyzeAndProduceLocked(projectId, false));
     }
 
     public StoryAnalysisResponse analyzeIncremental(String projectId) {
-        return projectOperationLock.execute(projectId, () -> analyzeIncrementalLocked(projectId));
+        return projectOperationLock.execute(projectId, () -> analyzeAndProduceLocked(projectId, true));
+    }
+
+    private StoryAnalysisResponse analyzeAndProduceLocked(String projectId, boolean incremental) {
+        long startedAt = System.currentTimeMillis();
+        progressEventPublisher.jobStarted(
+                projectId,
+                incremental ? "story_production_incremental" : "story_production",
+                "entity_extracting",
+                40,
+                "开始逐章分析故事资产，并同步构建场景内容"
+        );
+        projectService.getProjectEntity(projectId);
+        List<SourceChapter> chapters = sourceChapterMapper.findByProjectIdOrderByChapterNoAsc(projectId);
+        if (chapters.isEmpty()) {
+            throw new IllegalArgumentException("请先提交小说文本并完成章节切分");
+        }
+
+        if (!incremental) {
+            storyEntityMapper.deleteByProjectId(projectId);
+            storyEventMapper.deleteByProjectId(projectId);
+            sceneScriptMapper.deleteByProjectId(projectId);
+            outlineSceneMapper.deleteByProjectId(projectId);
+        }
+
+        List<StoryEvent> existingEvents = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
+        Set<Long> analyzedChapterIds = existingEvents.stream()
+                .map(StoryEvent::getChapterId)
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+        List<SourceChapter> pendingChapters = incremental
+                ? chapters.stream().filter(chapter -> !analyzedChapterIds.contains(chapter.getId())).toList()
+                : chapters;
+        if (pendingChapters.isEmpty()) {
+            return new StoryAnalysisResponse(
+                    projectId,
+                    listEntities(projectId),
+                    listEvents(projectId),
+                    "INCREMENTAL_NONE",
+                    true,
+                    false,
+                    "没有发现待增量分析的新章节"
+            );
+        }
+
+        List<SceneGenerationService.ProductionBatchHandle> productionHandles = new ArrayList<>();
+        boolean aiSuccess = true;
+        boolean fallbackUsed = false;
+        int processedChapters = 0;
+        for (SourceChapter chapter : pendingChapters) {
+            AssetBuildResult buildResult = incremental
+                    ? buildIncrementalStoryAssets(projectId, List.of(chapter))
+                    : buildStoryAssets(projectId, List.of(chapter));
+            aiSuccess = aiSuccess && buildResult.aiSuccess();
+            fallbackUsed = fallbackUsed || buildResult.fallbackUsed();
+
+            existingEvents = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId);
+            mergeIncrementalAssets(projectId, buildResult.assets(), existingEvents);
+            processedChapters++;
+            int entityCount = storyEntityMapper.findByProjectId(projectId).size();
+            int eventCount = storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId).size();
+            progressEventPublisher.assetsBatchReady(
+                    projectId,
+                    chapter.getChapterNo(),
+                    entityCount,
+                    eventCount
+            );
+
+            productionHandles.add(sceneGenerationService.generatePendingProductionBatch(projectId));
+        }
+
+        sceneGenerationService.completeProductionBatches(projectId, productionHandles);
+        log.info(
+                "逐章故事生产完成: projectId={}, incremental={}, chapterCount={}, entityCount={}, eventCount={}, elapsedMs={}",
+                projectId,
+                incremental,
+                processedChapters,
+                storyEntityMapper.findByProjectId(projectId).size(),
+                storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId).size(),
+                System.currentTimeMillis() - startedAt
+        );
+        return new StoryAnalysisResponse(
+                projectId,
+                listEntities(projectId),
+                listEvents(projectId),
+                incremental ? "INCREMENTAL_PIPELINE" : "PIPELINE",
+                aiSuccess,
+                fallbackUsed,
+                "已逐章分析并同步生成场景内容，共处理 " + processedChapters + " 章"
+        );
     }
 
     private StoryAnalysisResponse analyzeLocked(String projectId) {

@@ -47,6 +47,7 @@ GET /api/projects/{projectId}/events
 
 - `job.started`
 - `phase.changed`
+- `assets.batch.ready`
 - `outline.ready`
 - `scene.done`
 - `validation.warn`
@@ -88,10 +89,32 @@ GET /api/projects/{projectId}/events
 ```json
 {
   "projectId": "proj_20260606_001",
-  "sceneCount": 8,
-  "message": "场景大纲已生成"
+  "phase": "scene_generating",
+  "sceneCount": 3,
+  "batchSceneCount": 1,
+  "sceneIds": ["S003"],
+  "message": "新一批场景大纲已就绪，正在同步生成内容"
 }
 ```
+
+生产流水线会在每批大纲落库后发送一次 `outline.ready`。`sceneCount` 是当前累计场景数，
+`sceneIds` 是本批新增场景。前端收到事件后应增量拉取/合并大纲，不应等待最终批次。
+
+### `assets.batch.ready`
+
+```json
+{
+  "projectId": "proj_20260606_001",
+  "phase": "entity_extracting",
+  "chapterNo": 1,
+  "entityCount": 4,
+  "eventCount": 3,
+  "message": "第 1 章故事资产已就绪，正在构建对应场景"
+}
+```
+
+全量和增量生产都会按章节发布此事件。收到事件后前端应立即刷新实体与事件，
+而不是等待全部章节分析完成。
 
 ### `scene.done`
 
@@ -115,6 +138,8 @@ GET /api/projects/{projectId}/events
   "message": "存在未定义角色"
 }
 ```
+
+`scene.done` 在单个 Scene 内容写库后立即发送；此时其他批次的大纲分析和 Scene 内容生成可能仍在进行。
 
 ### `job.completed`
 

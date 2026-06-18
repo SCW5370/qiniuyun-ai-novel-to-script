@@ -3,6 +3,7 @@ package com.novel2script.backend.workflow;
 import com.novel2script.backend.project.Project;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 项目级 SSE 事件发布器。只推送阶段、数量和状态，不推送正文、Prompt、AI 原始响应或密钥。
@@ -21,6 +23,8 @@ public class ProgressEventPublisher {
     private static final Logger log = LoggerFactory.getLogger(ProgressEventPublisher.class);
 
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
+
+    private final AtomicLong eventSequence = new AtomicLong();
 
     public SseEmitter subscribe(Project project) {
         String projectId = project.getProjectId();
@@ -65,6 +69,30 @@ public class ProgressEventPublisher {
                 "progress", 60,
                 "sceneCount", sceneCount,
                 "message", "场景大纲已生成"
+        ));
+    }
+
+    public void outlineBatchReady(String projectId, int sceneCount, List<String> sceneIds) {
+        publish(projectId, "outline.ready", Map.of(
+                "projectId", projectId,
+                "phase", "scene_generating",
+                "progress", 62,
+                "sceneCount", sceneCount,
+                "batchSceneCount", sceneIds.size(),
+                "sceneIds", sceneIds,
+                "message", "新一批场景大纲已就绪，正在同步生成内容"
+        ));
+    }
+
+    public void assetsBatchReady(String projectId, int chapterNo, int entityCount, int eventCount) {
+        publish(projectId, "assets.batch.ready", Map.of(
+                "projectId", projectId,
+                "phase", "entity_extracting",
+                "progress", 44,
+                "chapterNo", chapterNo,
+                "entityCount", entityCount,
+                "eventCount", eventCount,
+                "message", "第 " + chapterNo + " 章故事资产已就绪，正在构建对应场景"
         ));
     }
 
@@ -122,7 +150,11 @@ public class ProgressEventPublisher {
 
     private void safeSend(String projectId, SseEmitter emitter, String eventName, Map<String, Object> payload) {
         try {
-            emitter.send(SseEmitter.event().name(eventName).data(payload));
+            emitter.send(SseEmitter.event()
+                    .id(Long.toString(eventSequence.incrementAndGet()))
+                    .name(eventName)
+                    .reconnectTime(3000L)
+                    .data(payload));
         } catch (IOException | IllegalStateException ex) {
             remove(projectId, emitter);
             completeQuietly(emitter);
@@ -131,14 +163,25 @@ public class ProgressEventPublisher {
     }
 
     private void remove(String projectId, SseEmitter emitter) {
-        List<SseEmitter> projectEmitters = emitters.get(projectId);
-        if (projectEmitters == null) {
-            return;
-        }
-        projectEmitters.remove(emitter);
-        if (projectEmitters.isEmpty()) {
-            emitters.remove(projectId);
-        }
+        emitters.computeIfPresent(projectId, (ignored, projectEmitters) -> {
+            projectEmitters.remove(emitter);
+            return projectEmitters.isEmpty() ? null : projectEmitters;
+        });
+    }
+
+    @Scheduled(fixedDelayString = "${SSE_HEARTBEAT_INTERVAL_MILLIS:15000}")
+    void sendHeartbeats() {
+        emitters.forEach((projectId, projectEmitters) -> {
+            for (SseEmitter emitter : projectEmitters) {
+                try {
+                    emitter.send(SseEmitter.event().comment("heartbeat").reconnectTime(3000L));
+                } catch (IOException | IllegalStateException ex) {
+                    remove(projectId, emitter);
+                    completeQuietly(emitter);
+                    log.debug("SSE 心跳失败，连接已移除: projectId={}", projectId, ex);
+                }
+            }
+        });
     }
 
     private void completeQuietly(SseEmitter emitter) {

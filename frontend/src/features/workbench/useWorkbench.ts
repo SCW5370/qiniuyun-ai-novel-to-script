@@ -81,6 +81,19 @@ type WorkflowNotice = {
   retryAction: "analyze" | "outline" | null;
 };
 
+type ScenePreviewCacheEntry = {
+  content: string;
+  status: "streaming" | "completed" | "failed";
+};
+
+type ActiveSceneStream = {
+  cacheKey: string;
+  eventSource: EventSource;
+  projectId: string;
+  requestId: number;
+  sceneId: string;
+};
+
 function workflowJobTypeLabel(jobType: string) {
   if (jobType.includes("OUTLINE")) return "场景生成";
   if (jobType.includes("ANALYZE")) return "故事分析";
@@ -144,6 +157,10 @@ export function useWorkbench() {
   const [progressStreamValue, setProgressStreamValue] = useState<number | null>(null);
   const [progressSourceMode, setProgressSourceMode] = useState<"real" | "static">("static");
   const [workflowNotice, setWorkflowNotice] = useState<WorkflowNotice | null>(null);
+  const [operationElapsedMs, setOperationElapsedMs] = useState(0);
+  const [readySceneIds, setReadySceneIds] = useState<Set<string>>(() => new Set());
+  const [revealedSceneIds, setRevealedSceneIds] = useState<Set<string>>(() => new Set());
+  const [isSceneBuildActive, setIsSceneBuildActive] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<StoryAnalysisViewModel | null>(null);
   const [analysisMessage, setAnalysisMessage] = useState("");
   const [analysisStatus, setAnalysisStatus] = useState<"success" | "warning" | "error" | "">("");
@@ -157,13 +174,21 @@ export function useWorkbench() {
   const [sceneStreamMessage, setSceneStreamMessage] = useState("");
   const [isValidatingProject, setIsValidatingProject] = useState(false);
   const [isExportingYaml, setIsExportingYaml] = useState(false);
-  const scenePreviewCacheRef = useRef<Record<string, string>>({});
+  const scenePreviewCacheRef = useRef<Record<string, ScenePreviewCacheEntry>>({});
+  const activeSceneStreamRef = useRef<ActiveSceneStream | null>(null);
+  const sceneStreamRequestSequenceRef = useRef(0);
+  const sceneTypewriterRef = useRef<{ requestId: number; handle: ReturnType<typeof setInterval> } | null>(null);
+  const readinessHydratedProjectRef = useRef("");
 
   const canLoadGeneratedScenes =
     project.status === "ENTITY_READY" ||
     project.status === "OUTLINED" ||
     project.status === "SCENE_GENERATING" ||
     project.status === "COMPLETED";
+  const isWorkflowRunning =
+    workflowNotice?.step === "submitted" ||
+    workflowNotice?.step === "analyzing" ||
+    workflowNotice?.step === "generating";
   const isProjectOperationBusy =
     isSubmittingSource ||
     isSummarizingChapters ||
@@ -171,7 +196,104 @@ export function useWorkbench() {
     isRegeneratingScene ||
     isStreamingScene ||
     isValidatingProject ||
-    isExportingYaml;
+    isExportingYaml ||
+    isWorkflowRunning;
+  // 自动流式预览不应被"上一段流式还没结束"卡住（切场景球时旧流会先被取消），
+  // 所以这里排除 isStreamingScene，并发由 activeSceneStreamRef 这个实时引用兜底。
+  const isNonStreamOperationBusy =
+    isSubmittingSource ||
+    isSummarizingChapters ||
+    isAnalyzing ||
+    isRegeneratingScene ||
+    isValidatingProject ||
+    isExportingYaml ||
+    isWorkflowRunning;
+
+  useEffect(() => {
+    if (!isWorkflowRunning) {
+      setOperationElapsedMs(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setOperationElapsedMs(0);
+    const handle = setInterval(() => {
+      setOperationElapsedMs(Date.now() - startedAt);
+    }, 1000);
+    return () => clearInterval(handle);
+  }, [isWorkflowRunning]);
+
+  function stopTypewriter() {
+    if (sceneTypewriterRef.current) {
+      clearInterval(sceneTypewriterRef.current.handle);
+      sceneTypewriterRef.current = null;
+    }
+  }
+
+  // 对已生成过的场景，用前端打字机把缓存内容逐字回放，既保证路演每次都能看到流式效果，
+  // 又不必重新调用 AI（零额外延迟、零额外额度、可反复演示）。
+  function replayCachedPreview(fullContent: string) {
+    cancelActiveSceneStream();
+    stopTypewriter();
+    const requestId = ++sceneStreamRequestSequenceRef.current;
+    setSceneStreamContent("");
+    setSceneStreamMessage("正在回放上次 AI 流式预览（本地打字机，后台仍以结构化 Scene 剧本为准）。");
+    const step = Math.max(2, Math.ceil(fullContent.length / 120));
+    let index = 0;
+    const handle = setInterval(() => {
+      if (sceneTypewriterRef.current?.requestId !== requestId) {
+        clearInterval(handle);
+        return;
+      }
+      index = Math.min(fullContent.length, index + step);
+      setSceneStreamContent(fullContent.slice(0, index));
+      if (index >= fullContent.length) {
+        clearInterval(handle);
+        sceneTypewriterRef.current = null;
+        setSceneStreamMessage("已回放上次 AI 流式预览。");
+      }
+    }, 24);
+    sceneTypewriterRef.current = { requestId, handle };
+  }
+
+  function invalidateScenePreviewCache(targetProjectId: string, sceneId?: string) {
+    stopTypewriter();
+    const activeStream = activeSceneStreamRef.current;
+    if (
+      activeStream?.projectId === targetProjectId &&
+      (sceneId == null || activeStream.sceneId === sceneId)
+    ) {
+      cancelActiveSceneStream("项目资产已更新，旧的流式预览已停止，可重新生成。");
+    }
+
+    if (sceneId) {
+      delete scenePreviewCacheRef.current[`${targetProjectId}:${sceneId}`];
+      return;
+    }
+
+    const prefix = `${targetProjectId}:`;
+    for (const cacheKey of Object.keys(scenePreviewCacheRef.current)) {
+      if (cacheKey.startsWith(prefix)) {
+        delete scenePreviewCacheRef.current[cacheKey];
+      }
+    }
+  }
+
+  function cancelActiveSceneStream(message?: string) {
+    const activeStream = activeSceneStreamRef.current;
+    if (!activeStream) return;
+
+    activeStream.eventSource.close();
+    activeSceneStreamRef.current = null;
+    const cached = scenePreviewCacheRef.current[activeStream.cacheKey];
+    if (cached?.status === "streaming") {
+      scenePreviewCacheRef.current[activeStream.cacheKey] = {
+        content: cached.content,
+        status: "failed"
+      };
+    }
+    setIsStreamingScene(false);
+    if (message) setSceneStreamMessage(message);
+  }
 
   function switchProject(nextProjectId: string) {
     setWorkflowNotice(null);
@@ -219,6 +341,9 @@ export function useWorkbench() {
 
     if (typeof data.phase === "string") {
       setProgressStreamPhase(data.phase);
+      if (data.phase.includes("outline") || data.phase.includes("scene_generating")) {
+        setIsSceneBuildActive(true);
+      }
     } else if (event === "outline.ready") {
       setProgressStreamPhase("outlined");
     } else if (event === "scene.done") {
@@ -227,10 +352,14 @@ export function useWorkbench() {
       setProgressStreamPhase("completed");
     }
 
-    if (event === "job.started" || event === "phase.changed") {
+    if (event === "job.started") {
       const nextPhase = data.phase ?? progressStreamPhase;
       const isSceneWork =
-        nextPhase.includes("outline") || nextPhase.includes("scene") || Boolean(data.jobType?.includes("OUTLINE"));
+        nextPhase.includes("outline") ||
+        nextPhase.includes("scene") ||
+        Boolean(data.jobType?.includes("OUTLINE")) ||
+        Boolean(data.jobType?.includes("story_production"));
+      if (isSceneWork) setIsSceneBuildActive(true);
       setWorkflowNotice((current) => ({
         jobId: current?.jobId ?? data.sceneId ?? "",
         jobType: data.jobType ?? current?.jobType ?? "",
@@ -240,17 +369,36 @@ export function useWorkbench() {
         tone: "running",
         retryAction: isSceneWork ? "outline" : "analyze"
       }));
-    } else if (event === "outline.ready" || event === "scene.done") {
+    } else if (event === "outline.ready") {
+      setIsSceneBuildActive(true);
       setWorkflowNotice((current) => ({
         jobId: current?.jobId ?? data.sceneId ?? "",
         jobType: data.jobType ?? current?.jobType ?? "",
-        step: "refreshing",
-        title: "完成后自动刷新",
-        detail: data.message ?? "后台任务已产出结果，正在刷新故事资产与场景。",
-        tone: "success",
+        step: "generating",
+        title: "正在边分析边生成",
+        detail: data.message ?? "新场景大纲已落库，正在生成内容并继续分析后续场景。",
+        tone: "running",
         retryAction: null
       }));
+    } else if (event === "scene.done") {
+      setIsSceneBuildActive(true);
+      setReadySceneIds((current) => {
+        if (!data.sceneId || current.has(data.sceneId)) return current;
+        const next = new Set(current);
+        next.add(data.sceneId);
+        return next;
+      });
+      setWorkflowNotice((current) => ({
+        jobId: current?.jobId ?? data.sceneId ?? "",
+        jobType: data.jobType ?? current?.jobType ?? "scene_scripts_generation",
+        step: "generating",
+        title: "正在逐场生成",
+        detail: data.message ?? `Scene 已就绪：${data.sceneId ?? ""}`,
+        tone: "running",
+        retryAction: "outline"
+      }));
     } else if (event === "job.completed") {
+      if (data.exportReady || data.phase === "completed") setIsSceneBuildActive(false);
       setWorkflowNotice((current) => ({
         jobId: current?.jobId ?? "",
         jobType: data.jobType ?? current?.jobType ?? "",
@@ -261,6 +409,7 @@ export function useWorkbench() {
         retryAction: null
       }));
     } else if (event === "job.failed") {
+      setIsSceneBuildActive(false);
       setWorkflowNotice((current) => ({
         jobId: current?.jobId ?? "",
         jobType: data.jobType ?? current?.jobType ?? "",
@@ -296,6 +445,19 @@ export function useWorkbench() {
     return projects;
   }
 
+  async function refreshStoryAssets(targetProjectId: string) {
+    const [entities, events] = await Promise.all([
+      getStoryEntities(targetProjectId),
+      getStoryEvents(targetProjectId)
+    ]);
+    setStoryEntities(entities);
+    setStoryEvents(events);
+    setStoryAssetsMessage("");
+    setStoryEventsMessage("");
+    setAnalysisStatus("success");
+    setAnalysisMessage(`已同步 ${entities.length} 个实体和 ${events.length} 个事件，后续章节仍在分析。`);
+  }
+
   async function handleCreateProject() {
     const title = projectTitleInput.trim();
     if (!title || isCreatingProject) return;
@@ -326,24 +488,34 @@ export function useWorkbench() {
   }
 
   async function refreshGeneratedAssets(targetProjectId: string) {
+    invalidateScenePreviewCache(targetProjectId);
     setWorkflowNotice((current) =>
       current && current.step !== "failed"
         ? {
             ...current,
-            step: "refreshing",
-            title: "完成后自动刷新",
-            detail: "后台结果已返回，正在同步故事资产、场景大纲和项目状态。",
-            tone: "success",
+            step: isSceneBuildActive ? "generating" : "refreshing",
+            title: isSceneBuildActive ? "正在边分析边生成" : "完成后自动刷新",
+            detail: isSceneBuildActive
+              ? "正在同步新场景；后台继续分析并生成后续内容。"
+              : "后台结果已返回，正在同步故事资产、场景大纲和项目状态。",
+            tone: isSceneBuildActive ? "running" : "success",
             retryAction: null
           }
         : current
     );
 
-    const [entities, events, scenes] = await Promise.all([
+    const [entities, events, scenes, scripts] = await Promise.all([
       getStoryEntities(targetProjectId),
       getStoryEvents(targetProjectId),
-      getProjectOutline(targetProjectId)
+      getProjectOutline(targetProjectId),
+      getProjectSceneScriptsSafe(targetProjectId)
     ]);
+
+    setReadySceneIds((current) => {
+      const next = new Set(current);
+      scripts.forEach((scene) => next.add(scene.sceneId));
+      return next.size === current.size ? current : next;
+    });
 
     if (entities.length > 0 || events.length > 0) {
       setStoryEntities(entities);
@@ -355,7 +527,11 @@ export function useWorkbench() {
     }
 
     if (scenes.length > 0) {
-      setOutlineScenes(scenes);
+      setOutlineScenes((current) => {
+        const merged = new Map(current.map((scene) => [scene.sceneId, scene]));
+        scenes.forEach((scene) => merged.set(scene.sceneId, scene));
+        return Array.from(merged.values()).sort((left, right) => left.seqNo - right.seqNo);
+      });
       setOutlineSourceMode("real");
       setOutlineMessage("已读取真实场景大纲。");
     }
@@ -389,6 +565,8 @@ export function useWorkbench() {
   }
 
   async function runStoryAnalysis(targetProjectId: string) {
+    invalidateScenePreviewCache(targetProjectId);
+    setIsSceneBuildActive(true);
     setAnalysisStatus("");
     setWorkflowNotice({
       jobId: "",
@@ -410,8 +588,13 @@ export function useWorkbench() {
   }
 
   async function completeSourceSubmission(nextChapters: ChapterViewModel[]) {
+    invalidateScenePreviewCache(project.projectId);
     setChapters(nextChapters);
     setOutlineScenes([]);
+    setReadySceneIds(new Set());
+    setRevealedSceneIds(new Set());
+    setIsSceneBuildActive(false);
+    readinessHydratedProjectRef.current = project.projectId;
     setOutlineSourceMode("empty");
     setSceneDetail(null);
     setSceneDetailSourceMode("empty");
@@ -445,6 +628,7 @@ export function useWorkbench() {
   }
 
   async function completeSourceAppend(nextChapters: ChapterViewModel[], appendedLabel: string) {
+    invalidateScenePreviewCache(project.projectId);
     setChapters(nextChapters);
     setSourceSubmitMessage(
       `${appendedLabel}已追加，当前共 ${nextChapters.length} 章。可执行增量分析处理新增内容。`
@@ -560,6 +744,7 @@ export function useWorkbench() {
     try {
       await runStoryAnalysis(project.projectId);
     } catch (error) {
+      setIsSceneBuildActive(false);
       setAnalysisStatus("error");
       const message = error instanceof Error ? error.message : "无法执行故事资产分析";
       setAnalysisMessage(`${message}。可重试。`);
@@ -576,15 +761,18 @@ export function useWorkbench() {
     setAnalysisResult(null);
     setAnalysisMessage("");
     setAnalysisStatus("");
+    setIsSceneBuildActive(true);
 
     try {
       const job = await analyzeStoryAssetsIncremental(project.projectId);
+      invalidateScenePreviewCache(project.projectId);
       markWorkflowSubmitted(job, "analyze");
       setAnalysisStatus("success");
       setAnalysisMessage(`增量任务已提交：${job.jobId}。正在分析，完成后自动刷新。`);
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
     } catch (error) {
+      setIsSceneBuildActive(false);
       setAnalysisStatus("error");
       const message = error instanceof Error ? error.message : "无法执行增量故事资产分析";
       setAnalysisMessage(`${message}。可重试。`);
@@ -597,15 +785,18 @@ export function useWorkbench() {
   async function handleGenerateIncrementalOutline() {
     if (connectionMode !== "connected" || isProjectOperationBusy) return;
 
-    setOutlineMessage("正在为新增事件生成追加场景...");
+    setIsSceneBuildActive(true);
+    setOutlineMessage("正在从第一个场景开始构建故事线...");
 
     try {
       const job = await generateProjectOutlineIncremental(project.projectId);
+      invalidateScenePreviewCache(project.projectId);
       markWorkflowSubmitted(job, "outline");
       setOutlineMessage(`任务已提交：${job.jobId}。正在生成场景，完成后自动刷新。`);
       await loadProjectDetail(project.projectId);
       await refreshProjectList();
     } catch (error) {
+      setIsSceneBuildActive(false);
       const message = error instanceof Error ? error.message : "无法生成增量场景大纲";
       setOutlineMessage(`${message}。可重试。`);
       markWorkflowFailed(`${message}。可重试。`, "outline");
@@ -627,6 +818,7 @@ export function useWorkbench() {
 
     try {
       const detail = await regenerateProjectScene(project.projectId, selectedSceneId);
+      invalidateScenePreviewCache(project.projectId, selectedSceneId);
       setSceneDetail(detail);
       setSceneDetailSourceMode("real");
       setSceneDetailMessage("真实 Scene 已重新生成。");
@@ -640,39 +832,79 @@ export function useWorkbench() {
   }
 
   function startScenePreview(sceneId: string) {
+    if (!sceneId) return;
     const cacheKey = `${project.projectId}:${sceneId}`;
     const cachedPreview = scenePreviewCacheRef.current[cacheKey];
-    if (cachedPreview) {
-      setSceneStreamContent(cachedPreview);
-      setSceneStreamMessage("已显示上次 AI 流式预览，后台仍会以结构化 Scene 剧本为准。");
+    if (cachedPreview?.status === "completed" && cachedPreview.content) {
+      replayCachedPreview(cachedPreview.content);
       return;
     }
 
     if (
       connectionMode !== "connected" ||
       outlineSourceMode !== "real" ||
-      !sceneId ||
-      isProjectOperationBusy ||
-      isStreamingScene
+      isNonStreamOperationBusy ||
+      activeSceneStreamRef.current !== null
     ) {
       return;
     }
 
+    stopTypewriter();
     setIsStreamingScene(true);
     setSceneStreamContent("");
     setSceneStreamMessage("正在连接 AI 流式预览...");
-    scenePreviewCacheRef.current[cacheKey] = "";
+    scenePreviewCacheRef.current[cacheKey] = { content: "", status: "streaming" };
 
     const streamUrl = `${appConfig.apiBaseUrl}/projects/${encodeURIComponent(
       project.projectId
     )}/scenes/${encodeURIComponent(sceneId)}/stream`;
     const eventSource = new EventSource(streamUrl);
+    const requestId = ++sceneStreamRequestSequenceRef.current;
+    activeSceneStreamRef.current = {
+      cacheKey,
+      eventSource,
+      projectId: project.projectId,
+      requestId,
+      sceneId
+    };
     let closed = false;
+    // 把高频 chunk 合并成 ~50ms 一次的刷新，避免每个 token 都触发整树重渲染导致流式卡顿。
+    let accumulated = "";
+    let pending = "";
+    let flushHandle: ReturnType<typeof setTimeout> | null = null;
 
-    function closeStream(message?: string) {
+    function isCurrentStream() {
+      return activeSceneStreamRef.current?.requestId === requestId;
+    }
+
+    function flushStreamBuffer() {
+      flushHandle = null;
+      if (!pending || !isCurrentStream()) return;
+      accumulated += pending;
+      pending = "";
+      setSceneStreamContent(accumulated);
+      scenePreviewCacheRef.current[cacheKey] = { content: accumulated, status: "streaming" };
+    }
+
+    function closeStream(message: string | undefined, status: "completed" | "failed") {
       if (closed) return;
       closed = true;
+      if (flushHandle != null) {
+        clearTimeout(flushHandle);
+        flushHandle = null;
+      }
       eventSource.close();
+      if (!isCurrentStream()) return;
+      if (pending) {
+        accumulated += pending;
+        pending = "";
+        setSceneStreamContent(accumulated);
+      }
+      activeSceneStreamRef.current = null;
+      scenePreviewCacheRef.current[cacheKey] = {
+        content: accumulated,
+        status
+      };
       setIsStreamingScene(false);
       if (message) setSceneStreamMessage(message);
     }
@@ -681,43 +913,41 @@ export function useWorkbench() {
       try {
         return JSON.parse(event.data) as { content?: string; message?: string };
       } catch {
-        closeStream("AI 流式预览返回数据格式异常。");
+        closeStream("AI 流式预览返回数据格式异常，可重新生成。", "failed");
         return null;
       }
     }
 
     eventSource.addEventListener("started", (event) => {
+      if (!isCurrentStream()) return;
       const payload = readPayload(event as MessageEvent<string>);
       if (payload) setSceneStreamMessage(payload.message ?? "AI 流式预览已开始。");
     });
 
     eventSource.addEventListener("chunk", (event) => {
+      if (!isCurrentStream()) return;
       const payload = readPayload(event as MessageEvent<string>);
       if (payload?.content) {
-        setSceneStreamContent((current) => {
-          const nextContent = current + payload.content;
-          scenePreviewCacheRef.current[cacheKey] = nextContent;
-          return nextContent;
-        });
+        pending += payload.content;
+        if (flushHandle == null) {
+          flushHandle = setTimeout(flushStreamBuffer, 50);
+        }
       }
     });
 
     eventSource.addEventListener("done", (event) => {
+      if (!isCurrentStream()) return;
       const payload = readPayload(event as MessageEvent<string>);
-      if (payload) closeStream(payload.message ?? "Scene 预览流式生成完成。");
+      if (payload) closeStream(payload.message ?? "Scene 预览流式生成完成。", "completed");
     });
 
     eventSource.addEventListener("failed", (event) => {
+      if (!isCurrentStream()) return;
       const payload = readPayload(event as MessageEvent<string>);
-      if (payload) closeStream(payload.message ?? "AI 流式预览失败。");
+      if (payload) closeStream(payload.message ?? "AI 流式预览失败，可重新生成。", "failed");
     });
 
-    eventSource.onerror = () => closeStream("AI 流式预览连接已断开。");
-  }
-
-  function handleStreamScenePreview() {
-    if (!selectedSceneId) return;
-    startScenePreview(selectedSceneId);
+    eventSource.onerror = () => closeStream("AI 流式预览连接已断开，可重新生成。", "failed");
   }
 
   async function handleValidateProject() {
@@ -772,6 +1002,11 @@ export function useWorkbench() {
 
   useEffect(() => {
     let cancelled = false;
+
+    readinessHydratedProjectRef.current = "";
+    setReadySceneIds(new Set());
+    setRevealedSceneIds(new Set());
+    setIsSceneBuildActive(false);
 
     async function bootstrapProject() {
       setAnalysisResult(null);
@@ -908,8 +1143,29 @@ export function useWorkbench() {
 
     async function loadProjectOutline() {
       try {
-        const scenes = await getProjectOutline(project.projectId);
+        const [scenes, scripts] = await Promise.all([
+          getProjectOutline(project.projectId),
+          getProjectSceneScriptsSafe(project.projectId)
+        ]);
         if (cancelled) return;
+        const generatedIds = new Set(scripts.map((scene) => scene.sceneId));
+        setReadySceneIds((current) => {
+          const next = new Set(current);
+          generatedIds.forEach((sceneId) => next.add(sceneId));
+          return next;
+        });
+
+        if (readinessHydratedProjectRef.current !== project.projectId) {
+          const initiallyRevealed = new Set<string>();
+          if (!isSceneBuildActive) {
+            for (const scene of scenes.slice().sort((left, right) => left.seqNo - right.seqNo)) {
+              if (!generatedIds.has(scene.sceneId)) break;
+              initiallyRevealed.add(scene.sceneId);
+            }
+          }
+          setRevealedSceneIds(initiallyRevealed);
+          readinessHydratedProjectRef.current = project.projectId;
+        }
         if (scenes.length === 0) {
           setOutlineScenes([]);
           setOutlineSourceMode("empty");
@@ -940,12 +1196,84 @@ export function useWorkbench() {
       return;
     }
 
-    if (!outlineScenes.some((scene) => scene.sceneId === selectedSceneId)) {
-      setSelectedSceneId(outlineScenes[0].sceneId);
+    const revealedScenes = outlineScenes
+      .slice()
+      .sort((left, right) => left.seqNo - right.seqNo)
+      .filter((scene) => revealedSceneIds.has(scene.sceneId));
+
+    if (!revealedScenes.some((scene) => scene.sceneId === selectedSceneId)) {
+      setSelectedSceneId(revealedScenes[0]?.sceneId ?? "");
     }
-  }, [outlineScenes, selectedSceneId, setSelectedSceneId]);
+  }, [outlineScenes, revealedSceneIds, selectedSceneId, setSelectedSceneId]);
 
   useEffect(() => {
+    const orderedScenes = outlineScenes.slice().sort((left, right) => left.seqNo - right.seqNo);
+    const nextScene = orderedScenes.find(
+      (scene) => readySceneIds.has(scene.sceneId) && !revealedSceneIds.has(scene.sceneId)
+    );
+    if (!nextScene) return;
+    const nextSceneIndex = orderedScenes.findIndex((scene) => scene.sceneId === nextScene.sceneId);
+    const continuesMainline = orderedScenes
+      .slice(0, nextSceneIndex)
+      .every((scene) => revealedSceneIds.has(scene.sceneId));
+
+    const handle = window.setTimeout(() => {
+      setRevealedSceneIds((current) => {
+        if (current.has(nextScene.sceneId)) return current;
+        const next = new Set(current);
+        next.add(nextScene.sceneId);
+        return next;
+      });
+      if (continuesMainline) {
+        setSelectedSceneId(nextScene.sceneId);
+      }
+    }, 180);
+
+    return () => window.clearTimeout(handle);
+  }, [outlineScenes, readySceneIds, revealedSceneIds, setSelectedSceneId]);
+
+  useEffect(() => {
+    if (connectionMode !== "connected" || !isSceneBuildActive) return;
+    let cancelled = false;
+    let syncing = false;
+
+    async function syncGeneratedSceneIds() {
+      if (syncing) return;
+      syncing = true;
+      try {
+        const scripts = await listProjectScenes(project.projectId);
+        if (cancelled) return;
+        setReadySceneIds((current) => {
+          const next = new Set(current);
+          scripts.forEach((scene) => next.add(scene.sceneId));
+          return next.size === current.size ? current : next;
+        });
+      } catch {
+        // SSE 仍是主通道；轮询只负责断线或漏事件后的状态自愈。
+      } finally {
+        syncing = false;
+      }
+    }
+
+    void syncGeneratedSceneIds();
+    const handle = window.setInterval(() => void syncGeneratedSceneIds(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(handle);
+    };
+  }, [connectionMode, isSceneBuildActive, project.projectId]);
+
+  useEffect(() => {
+    return () => {
+      activeSceneStreamRef.current?.eventSource.close();
+      activeSceneStreamRef.current = null;
+      stopTypewriter();
+    };
+  }, []);
+
+  useEffect(() => {
+    cancelActiveSceneStream();
+    stopTypewriter();
     setSceneStreamContent("");
     setSceneStreamMessage("");
 
@@ -964,6 +1292,8 @@ export function useWorkbench() {
     }
 
     let cancelled = false;
+    setSceneDetail(null);
+    setSceneDetailSourceMode("empty");
     setSceneDetailMessage("正在加载真实 Scene...");
 
     async function loadSceneDetail() {
@@ -1012,6 +1342,7 @@ export function useWorkbench() {
     const eventNames = [
       "job.started",
       "phase.changed",
+      "assets.batch.ready",
       "outline.ready",
       "scene.done",
       "validation.warn",
@@ -1024,7 +1355,15 @@ export function useWorkbench() {
         const parsed = parseProgressStreamMessage(rawMessage);
         if (parsed && parsed.data.projectId === project.projectId) {
           applyProgressEvent(parsed);
-          if (parsed.event === "job.completed" || parsed.event === "outline.ready") {
+          if (parsed.event === "assets.batch.ready") {
+            void refreshStoryAssets(project.projectId).catch(() => {
+              setProgressSourceMode("static");
+            });
+          } else if (parsed.event === "outline.ready") {
+            void refreshGeneratedAssets(project.projectId).catch(() => {
+              setProgressSourceMode("static");
+            });
+          } else if (parsed.event === "job.completed") {
             void refreshGeneratedAssetsAndContinue(project.projectId).catch(() => {
               setProgressSourceMode("static");
             });
@@ -1089,7 +1428,9 @@ export function useWorkbench() {
     return {
       activePhaseIndex: Math.max(phaseLabels.indexOf(activePhaseLabel), 0),
       activePhaseLabel,
-      analysisStateLabel: analysisModeLabel || (analysisReady ? "分析已完成" : "待执行分析"),
+      analysisStateLabel: isSceneBuildActive
+        ? "逐章分析生成中"
+        : analysisModeLabel || (analysisReady ? "分析已完成" : "待执行分析"),
       characterCount: storyEntities.filter((entity) => entity.entityType === "CHARACTER").length,
       chapterSummaryCount: chapters.filter((chapter) => chapter.summary?.trim()).length,
       connectionLabel:
@@ -1127,6 +1468,7 @@ export function useWorkbench() {
     analysisResult,
     chapters,
     connectionMode,
+    isSceneBuildActive,
     outlineScenes,
     progressSourceMode,
     progressStreamPhase,
@@ -1157,7 +1499,6 @@ export function useWorkbench() {
       handleRegenerateScene,
       retryWorkflowNotice,
       handleSearchProjects,
-      handleStreamScenePreview,
       handleSubmitSourceText,
       handleSummarizeChapters,
       handleUploadSourceFile,
@@ -1204,11 +1545,16 @@ export function useWorkbench() {
       isExportingYaml,
       isProjectOperationBusy,
       isRegeneratingScene,
+      isSceneBuildActive,
       isStreamingScene,
       isSubmittingSource,
       isSummarizingChapters,
       isValidatingProject,
+      isWorkflowRunning,
+      operationElapsedMs,
       outlineScenes,
+      readySceneIds,
+      revealedSceneIds,
       project,
       projectKeyword,
       projectList,
