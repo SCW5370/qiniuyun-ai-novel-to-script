@@ -40,7 +40,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class SceneGenerationService {
@@ -150,9 +149,7 @@ public class SceneGenerationService {
         }
 
         List<StoryEntity> entities = storyEntityMapper.findByProjectId(projectId);
-        Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
-                .map(SceneScript::getSceneId)
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> generatedSceneIds = generatedUsableSceneIds(projectId);
         List<Future<SceneScript>> futures = new ArrayList<>();
         List<String> submittedSceneIds = new ArrayList<>();
         List<OutlineScene> contextScenes = new ArrayList<>(existingScenes);
@@ -197,7 +194,7 @@ public class SceneGenerationService {
             sceneIds.addAll(handle.sceneIds);
             futures.addAll(handle.futures);
         }
-        waitForSceneGenerationTasks(projectId, sceneIds, futures);
+        SceneTaskReport taskReport = waitForSceneGenerationTasks(projectId, sceneIds, futures);
         reconcileOutlineAndSceneScriptOrder(projectId);
         projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
         List<SceneScriptResponse> scripts = listSceneScripts(projectId);
@@ -206,7 +203,7 @@ public class SceneGenerationService {
                 "completed",
                 100,
                 true,
-                "故事资产、场景大纲与 Scene 内容已逐章生成完成"
+                completionMessage("故事资产、场景大纲与 Scene 内容已逐章生成完成", taskReport)
         );
         return scripts;
     }
@@ -312,9 +309,7 @@ public class SceneGenerationService {
             if (outlineScenes.isEmpty()) {
                 return true;
             }
-            Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
-                    .map(SceneScript::getSceneId)
-                    .collect(java.util.stream.Collectors.toSet());
+            Set<String> generatedSceneIds = generatedUsableSceneIds(projectId);
             return outlineScenes.stream()
                     .map(OutlineScene::getSceneId)
                     .anyMatch(sceneId -> !generatedSceneIds.contains(sceneId));
@@ -339,9 +334,7 @@ public class SceneGenerationService {
             throw new IllegalArgumentException("请先生成场景大纲");
         }
 
-        Set<String> existingSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
-                .map(SceneScript::getSceneId)
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> existingSceneIds = generatedUsableSceneIds(projectId);
         List<String> missingSceneIds = outlineScenes.stream()
                 .map(OutlineScene::getSceneId)
                 .filter(sceneId -> !existingSceneIds.contains(sceneId))
@@ -353,27 +346,22 @@ public class SceneGenerationService {
         for (String sceneId : missingSceneIds) {
             futures.add(sceneScriptExecutor.submit(() -> generateSceneScript(projectId, sceneId, false)));
         }
-        for (int i = 0; i < missingSceneIds.size(); i++) {
-            try {
-                futures.get(i).get();
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                futures.forEach(future -> future.cancel(true));
-                throw new IllegalStateException("Scene 剧本生成被中断: projectId=" + projectId + ", sceneId=" + missingSceneIds.get(i), ex);
-            } catch (ExecutionException ex) {
-                Throwable cause = ex.getCause();
-                throw new IllegalStateException("Scene 剧本生成失败: projectId=" + projectId + ", sceneId=" + missingSceneIds.get(i),
-                        cause != null ? cause : ex);
-            }
-        }
+        SceneTaskReport taskReport = waitForSceneGenerationTasks(projectId, missingSceneIds, futures);
 
         projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
         List<SceneScriptResponse> scripts = listSceneScripts(projectId);
-        progressEventPublisher.jobCompleted(projectId, "completed", 100, true, "全部 Scene 剧本已按顺序生成");
+        progressEventPublisher.jobCompleted(
+                projectId,
+                "completed",
+                100,
+                true,
+                completionMessage("全部 Scene 剧本已按顺序生成", taskReport)
+        );
         log.info(
-                "缺失 Scene 剧本生成完成: projectId={}, scriptCount={}, elapsedMs={}",
+                "缺失 Scene 剧本生成完成: projectId={}, scriptCount={}, failedCount={}, elapsedMs={}",
                 projectId,
                 scripts.size(),
+                taskReport.failedCount(),
                 System.currentTimeMillis() - startedAt
         );
         return scripts;
@@ -403,9 +391,7 @@ public class SceneGenerationService {
         List<StoryEvent> eventsToOutline = incremental || !existingScenes.isEmpty()
                 ? findPendingOutlineEvents(existingScenes, allEvents)
                 : allEvents;
-        Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
-                .map(SceneScript::getSceneId)
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> generatedSceneIds = generatedUsableSceneIds(projectId);
         List<Future<SceneScript>> sceneFutures = new ArrayList<>();
         List<String> submittedSceneIds = new ArrayList<>();
         List<OutlineScene> contextScenes = new ArrayList<>(existingScenes);
@@ -446,7 +432,7 @@ public class SceneGenerationService {
                 sceneFutures,
                 submittedSceneIds
         );
-        waitForSceneGenerationTasks(projectId, submittedSceneIds, sceneFutures);
+        SceneTaskReport taskReport = waitForSceneGenerationTasks(projectId, submittedSceneIds, sceneFutures);
 
         if (incremental) {
             reconcileOutlineAndSceneScriptOrder(projectId);
@@ -458,14 +444,15 @@ public class SceneGenerationService {
                 "completed",
                 100,
                 true,
-                "场景分析与 Scene 内容已逐批生成完成"
+                completionMessage("场景分析与 Scene 内容已逐批生成完成", taskReport)
         );
         log.info(
-                "场景生产流水线完成: projectId={}, incremental={}, outlineCount={}, scriptCount={}, elapsedMs={}",
+                "场景生产流水线完成: projectId={}, incremental={}, outlineCount={}, scriptCount={}, failedCount={}, elapsedMs={}",
                 projectId,
                 incremental,
                 contextScenes.size(),
                 scripts.size(),
+                taskReport.failedCount(),
                 System.currentTimeMillis() - startedAt
         );
         return scripts;
@@ -495,28 +482,95 @@ public class SceneGenerationService {
         }
     }
 
-    private void waitForSceneGenerationTasks(
+    private SceneTaskReport waitForSceneGenerationTasks(
             String projectId,
             List<String> sceneIds,
             List<Future<SceneScript>> futures
     ) {
+        List<String> failedSceneIds = new ArrayList<>();
         for (int i = 0; i < futures.size(); i++) {
+            String sceneId = i < sceneIds.size() ? sceneIds.get(i) : "UNKNOWN";
             try {
                 futures.get(i).get();
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 futures.forEach(future -> future.cancel(true));
                 throw new IllegalStateException(
-                        "Scene 生产流水线被中断: projectId=" + projectId + ", sceneId=" + sceneIds.get(i),
+                        "Scene 生产流水线被中断: projectId=" + projectId + ", sceneId=" + sceneId,
                         ex
                 );
             } catch (ExecutionException ex) {
                 Throwable cause = ex.getCause();
-                throw new IllegalStateException(
-                        "Scene 生产流水线失败: projectId=" + projectId + ", sceneId=" + sceneIds.get(i),
-                        cause != null ? cause : ex
+                Throwable failure = cause != null ? cause : ex;
+                failedSceneIds.add(sceneId);
+                log.warn(
+                        "Scene 生产任务失败，写入失败占位并继续等待其他 Scene: projectId={}, sceneId={}, reason={}",
+                        projectId,
+                        sceneId,
+                        rootCauseMessage(failure)
                 );
+                SceneScript failedScene = persistFailedSceneScript(projectId, sceneId, failure);
+                progressEventPublisher.sceneDone(projectId, sceneId, failedScene.getValidationStatus());
             }
+        }
+        return new SceneTaskReport(futures.size(), failedSceneIds);
+    }
+
+    private Set<String> generatedUsableSceneIds(String projectId) {
+        return sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
+                .filter(scene -> !"FAILED".equalsIgnoreCase(scene.getValidationStatus()))
+                .map(SceneScript::getSceneId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private SceneScript persistFailedSceneScript(String projectId, String sceneId, Throwable failure) {
+        SceneScript existingScene = sceneScriptMapper.findByProjectIdAndSceneId(projectId, sceneId).orElse(null);
+        if (existingScene != null && !"FAILED".equalsIgnoreCase(existingScene.getValidationStatus())) {
+            return existingScene;
+        }
+
+        OutlineScene outlineScene = outlineSceneMapper.findByProjectIdAndSceneId(projectId, sceneId)
+                .orElseThrow(() -> new IllegalStateException("无法写入失败占位，场景大纲不存在: " + sceneId, failure));
+        SceneScript failedScene = buildFailedSceneScript(projectId, outlineScene, rootCauseMessage(failure));
+        SceneScript savedScene = writeTransactionTemplate.execute(
+                status -> saveGeneratedSceneScript(projectId, sceneId, failedScene)
+        );
+        if (savedScene == null) {
+            throw new IllegalStateException("无法保存失败 Scene 占位: " + sceneId, failure);
+        }
+        return savedScene;
+    }
+
+    private SceneScript buildFailedSceneScript(String projectId, OutlineScene outlineScene, String reason) {
+        return new SceneScript(
+                projectId,
+                outlineScene.getSceneId(),
+                outlineScene.getSeqNo(),
+                outlineScene.getTitle(),
+                toJson(List.of(
+                        outlineScene.getPurposePlot(),
+                        "当前 Scene 生成失败，系统已保留失败占位，后续可单独重新生成。"
+                )),
+                toJson(List.of()),
+                outlineScene.getSourceRefsJson(),
+                "FAILED",
+                toJson(List.of("Scene 生成失败：" + reason))
+        );
+    }
+
+    private String completionMessage(String successMessage, SceneTaskReport taskReport) {
+        if (taskReport.failedCount() == 0) {
+            return successMessage;
+        }
+        return successMessage + "，其中 " + taskReport.failedCount()
+                + " 个 Scene 生成失败，已写入失败占位，可单独重试："
+                + String.join("、", taskReport.failedSceneIds());
+    }
+
+    private record SceneTaskReport(int totalCount, List<String> failedSceneIds) {
+
+        private int failedCount() {
+            return failedSceneIds.size();
         }
     }
 
@@ -524,69 +578,33 @@ public class SceneGenerationService {
         return projectOperationLock.execute(projectId, () -> regenerateSceneScriptLocked(projectId, sceneId));
     }
 
-    public SseEmitter streamScenePreview(String projectId, String sceneId) {
+    public SseEmitter streamSceneScript(String projectId, String sceneId) {
         SseEmitter emitter = new SseEmitter(sceneStreamTimeoutMillis);
-        AtomicBoolean terminal = new AtomicBoolean(false);
-        AtomicReference<Future<?>> taskReference = new AtomicReference<>();
-        Runnable cancelTask = () -> {
-            if (!terminal.compareAndSet(false, true)) {
-                return;
-            }
-            Future<?> task = taskReference.get();
-            if (task != null) {
-                task.cancel(true);
-            }
+        AtomicBoolean clientConnected = new AtomicBoolean(true);
+        Runnable markDisconnected = () -> {
+            clientConnected.set(false);
+            completeQuietly(emitter);
         };
-        emitter.onTimeout(cancelTask);
-        emitter.onError(ignored -> cancelTask.run());
-        emitter.onCompletion(cancelTask);
+        emitter.onTimeout(markDisconnected);
+        emitter.onError(ignored -> markDisconnected.run());
+        emitter.onCompletion(() -> clientConnected.set(false));
 
         try {
-            Future<?> task = sceneStreamExecutor.submit(() -> {
+            sceneStreamExecutor.submit(() -> {
                 try {
-                    SceneStreamContext context = projectOperationLock.execute(
+                    SceneScriptResponse scene = projectOperationLock.execute(
                             projectId,
-                            () -> buildSceneStreamContext(projectId, sceneId)
+                            () -> streamAndSaveSceneScript(projectId, sceneId, emitter, clientConnected)
                     );
-                    if (!sendStreamEvent(emitter, "started", Map.of(
+                    sendStreamEventIfConnected(clientConnected, emitter, "done", Map.of(
                             "projectId", projectId,
                             "sceneId", sceneId,
-                            "message", "开始流式生成 Scene 预览"
-                    ))) {
-                        return;
-                    }
-
-                    aiChatClient.streamText(
-                            "你是专业剧本写作助手。请按影视剧本风格输出，不要返回 JSON。",
-                            buildScenePreviewPrompt(context.project(), context.outlineScene(), context.entities(), context.events()),
-                            chunk -> {
-                                if (!sendStreamEvent(emitter, "chunk", Map.of(
-                                        "projectId", projectId,
-                                        "sceneId", sceneId,
-                                        "content", chunk
-                                ))) {
-                                    throw new StreamClientDisconnectedException();
-                                }
-                            }
-                    );
-
-                    if (!terminal.compareAndSet(false, true)) {
-                        return;
-                    }
-                    sendStreamEvent(emitter, "done", Map.of(
-                            "projectId", projectId,
-                            "sceneId", sceneId,
-                            "message", "Scene 预览流式生成完成"
+                            "message", "正式 Scene 已流式生成并落库",
+                            "scene", scene
                     ));
-                    emitter.complete();
-                } catch (StreamClientDisconnectedException ex) {
-                    terminal.set(true);
                     completeQuietly(emitter);
                 } catch (Exception ex) {
-                    if (!terminal.compareAndSet(false, true)) {
-                        return;
-                    }
-                    sendStreamEvent(emitter, "failed", Map.of(
+                    sendStreamEventIfConnected(clientConnected, emitter, "failed", Map.of(
                             "projectId", projectId,
                             "sceneId", sceneId,
                             "message", rootCauseMessage(ex)
@@ -594,12 +612,8 @@ public class SceneGenerationService {
                     completeQuietly(emitter);
                 }
             });
-            taskReference.set(task);
-            if (terminal.get()) {
-                task.cancel(true);
-            }
         } catch (RejectedExecutionException ex) {
-            terminal.set(true);
+            clientConnected.set(false);
             sendStreamEvent(emitter, "failed", Map.of(
                     "projectId", projectId,
                     "sceneId", sceneId,
@@ -610,25 +624,71 @@ public class SceneGenerationService {
         return emitter;
     }
 
+    private SceneScriptResponse streamAndSaveSceneScript(
+            String projectId,
+            String sceneId,
+            SseEmitter emitter,
+            AtomicBoolean clientConnected
+    ) {
+        long startedAt = System.currentTimeMillis();
+        log.info("开始正式流式生成 Scene: projectId={}, sceneId={}", projectId, sceneId);
+        progressEventPublisher.jobStarted(projectId, "scene_generation_stream", "scene_generating", 70, "开始正式流式生成 Scene: " + sceneId);
+        SceneGenerationContext context = readOnlyTransactionTemplate.execute(status -> buildSceneGenerationContext(projectId, sceneId));
+        if (context == null) {
+            throw new IllegalStateException("无法读取 Scene 生成上下文: " + sceneId);
+        }
+
+        sendStreamEventIfConnected(clientConnected, emitter, "started", Map.of(
+                "projectId", projectId,
+                "sceneId", sceneId,
+                "message", "开始流式生成正式 Scene"
+        ));
+
+        SceneScript sceneScript;
+        try {
+            String json = aiChatClient.streamJson(
+                    "你是专业剧本写作助手，负责根据场景大纲生成 Scene 级动作和对白。只返回合法 JSON。",
+                    buildScenePrompt(context.project(), context.outlineScene(), context.entities(), context.events(), true),
+                    chunk -> sendStreamEventIfConnected(clientConnected, emitter, "chunk", Map.of(
+                            "projectId", projectId,
+                            "sceneId", sceneId,
+                            "content", chunk
+                    ))
+            );
+            sceneScript = parseSceneScript(projectId, context.outlineScene(), json);
+        } catch (Exception ex) {
+            log.warn("正式流式 Scene 生成失败，切换规则兜底: projectId={}, sceneId={}, reason={}", projectId, sceneId, rootCauseMessage(ex));
+            progressEventPublisher.phaseChanged(projectId, "scene_generating", 72, "正式流式 Scene 失败，已切换规则兜底: " + sceneId);
+            sendStreamEventIfConnected(clientConnected, emitter, "chunk", Map.of(
+                    "projectId", projectId,
+                    "sceneId", sceneId,
+                    "content", "\n\nAI 正式流式生成失败，已保存规则兜底 Scene。"
+            ));
+            sceneScript = buildFallbackSceneScript(projectId, context.outlineScene());
+        }
+
+        SceneScript generatedSceneScript = sceneScript;
+        SceneScript savedSceneScript = writeTransactionTemplate.execute(
+                status -> saveGeneratedSceneScript(projectId, sceneId, generatedSceneScript)
+        );
+        if (savedSceneScript == null) {
+            throw new IllegalStateException("无法保存 Scene: " + sceneId);
+        }
+        progressEventPublisher.sceneDone(projectId, sceneId, sceneScript.getValidationStatus());
+        log.info(
+                "正式流式 Scene 生成并落库完成: projectId={}, sceneId={}, validationStatus={}, elapsedMs={}",
+                projectId,
+                sceneId,
+                sceneScript.getValidationStatus(),
+                System.currentTimeMillis() - startedAt
+        );
+        return toSceneScriptResponse(savedSceneScript);
+    }
+
     private SceneScriptResponse regenerateSceneScriptLocked(String projectId, String sceneId) {
         projectService.getProjectEntity(projectId);
         sceneScriptMapper.deleteByProjectIdAndSceneId(projectId, sceneId);
         return toSceneScriptResponse(generateSceneScript(projectId, sceneId, true));
-    }
-
-    private SceneStreamContext buildSceneStreamContext(String projectId, String sceneId) {
-        Project project = projectService.getProjectEntity(projectId);
-        OutlineScene outlineScene = outlineSceneMapper.findByProjectIdAndSceneId(projectId, sceneId)
-                .orElseGet(() -> {
-                    List<OutlineScene> scenes = generateOutline(projectId);
-                    return scenes.stream()
-                            .filter(scene -> scene.getSceneId().equals(sceneId))
-                            .findFirst()
-                            .orElseThrow(() -> new IllegalArgumentException("场景不存在: " + sceneId));
-                });
-        List<StoryEntity> entities = filterSceneEntities(outlineScene, storyEntityMapper.findByProjectId(projectId));
-        List<StoryEvent> events = filterSceneEvents(outlineScene, storyEventMapper.findByProjectIdOrderByEventOrderAsc(projectId));
-        return new SceneStreamContext(project, outlineScene, entities, events);
     }
 
     private List<OutlineScene> generateOutline(String projectId) {
@@ -717,7 +777,7 @@ public class SceneGenerationService {
         return sceneScriptMapper.findByProjectIdAndSceneId(projectId, sceneId).orElse(sceneScript);
     }
 
-    private String rootCauseMessage(Exception ex) {
+    private String rootCauseMessage(Throwable ex) {
         Throwable current = ex;
         while (current.getCause() != null) {
             current = current.getCause();
@@ -1216,35 +1276,20 @@ public class SceneGenerationService {
                 """.formatted(project.getTitle(), regenerating, toJson(outlineScene), toJson(entities), toJson(events));
     }
 
-    private String buildScenePreviewPrompt(Project project, OutlineScene outlineScene, List<StoryEntity> entities, List<StoryEvent> events) {
-        return """
-                请流式生成单个 Scene 级剧本预览。
-                项目标题：%s
-
-                输出格式：
-                场景标题：...
-                动作：
-                - ...
-                对白：
-                C001：...
-                C002：...
-
-                要求：
-                1. 使用中文影视剧本表达，实时输出时保持自然段完整。
-                2. 动作描写 2 到 5 条，对白 1 到 6 条。
-                3. 对白角色只能使用场景大纲 characters 中出现的角色 ID，不要新增未给出的角色 ID。
-                4. 严格围绕场景大纲和 sourceRefs 对应事件生成，不要续写其他章节内容。
-                5. 这是流式预览，不需要输出 JSON，不需要 Markdown 代码块。
-
-                场景大纲：
-                %s
-
-                故事实体：
-                %s
-
-                故事事件：
-                %s
-                """.formatted(project.getTitle(), toJson(outlineScene), toJson(entities), toJson(events));
+    private boolean sendStreamEventIfConnected(
+            AtomicBoolean clientConnected,
+            SseEmitter emitter,
+            String eventName,
+            Map<String, Object> payload
+    ) {
+        if (!clientConnected.get()) {
+            return false;
+        }
+        boolean sent = sendStreamEvent(emitter, eventName, payload);
+        if (!sent) {
+            clientConnected.set(false);
+        }
+        return sent;
     }
 
     private boolean sendStreamEvent(SseEmitter emitter, String eventName, Map<String, Object> payload) {
@@ -1340,22 +1385,11 @@ public class SceneGenerationService {
         }
     }
 
-    private record SceneStreamContext(
-            Project project,
-            OutlineScene outlineScene,
-            List<StoryEntity> entities,
-            List<StoryEvent> events
-    ) {
-    }
-
     private record SceneGenerationContext(
             Project project,
             OutlineScene outlineScene,
             List<StoryEntity> entities,
             List<StoryEvent> events
     ) {
-    }
-
-    private static final class StreamClientDisconnectedException extends RuntimeException {
     }
 }

@@ -63,6 +63,13 @@ public class WorkflowService {
 
         for (OutlineSceneResponse outlineScene : outline) {
             SceneScriptResponse scene = sceneGenerationService.getSceneScript(projectId, outlineScene.getSceneId());
+            if ("FAILED".equalsIgnoreCase(scene.getValidationStatus())) {
+                ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
+                        scene.getSceneId(), "error", "generation", "Scene 生成失败，请重新生成该 Scene"
+                );
+                items.add(item);
+                progressEventPublisher.validationWarn(projectId, item.sceneId(), item.field(), item.message());
+            }
             if (scene.getAction().isEmpty()) {
                 ValidationReportResponse.ValidationItemResponse item = new ValidationReportResponse.ValidationItemResponse(
                         scene.getSceneId(), "error", "action", "Scene 缺少动作描写"
@@ -150,6 +157,14 @@ public class WorkflowService {
                 yaml.append("      - \"").append(escapeYaml(sourceRef)).append("\"\n");
             }
             yaml.append("    validation_status: \"").append(escapeYaml(scene.getValidationStatus())).append("\"\n");
+            if (scene.getWarnings().isEmpty()) {
+                yaml.append("    warnings: []\n");
+            } else {
+                yaml.append("    warnings:\n");
+                for (String warning : scene.getWarnings()) {
+                    yaml.append("      - \"").append(escapeYaml(warning)).append("\"\n");
+                }
+            }
         }
         projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
         String yamlContent = yaml.toString();

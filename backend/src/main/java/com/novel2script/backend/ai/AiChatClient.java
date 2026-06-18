@@ -173,6 +173,53 @@ public class AiChatClient {
         }
     }
 
+    public String streamJson(String systemPrompt, String userPrompt, Consumer<String> chunkConsumer) {
+        if (!aiProperties.isConfigured()) {
+            throw new IllegalStateException("未配置 AI_API_KEY");
+        }
+
+        try {
+            Map<String, Object> requestBody = Map.of(
+                    "model", aiProperties.getModelId(),
+                    "temperature", 0.2,
+                    "stream", true,
+                    "response_format", Map.of("type", "json_object"),
+                    "messages", List.of(
+                            Map.of("role", "system", "content", systemPrompt),
+                            Map.of("role", "user", "content", userPrompt)
+                    )
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(aiProperties.getBaseUrl() + "/chat/completions"))
+                    .timeout(Duration.ofSeconds(aiProperties.getTimeoutSeconds()))
+                    .header("Authorization", "Bearer " + aiProperties.getApiKey())
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody), StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                String errorBody = boundedResponseBody(response.body());
+                throw new IllegalStateException("AI JSON 流式响应失败: HTTP " + response.statusCode() + " " + errorBody);
+            }
+
+            StringBuilder content = new StringBuilder();
+            readStreamChunks(response.body(), chunk -> {
+                content.append(chunk);
+                chunkConsumer.accept(chunk);
+            });
+            return normalizeJsonContent(content.toString());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("AI JSON 流式生成被中断", ex);
+        } catch (RuntimeException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalStateException("AI JSON 流式生成失败", ex);
+        }
+    }
+
     void readStreamChunks(InputStream inputStream, Consumer<String> chunkConsumer) throws Exception {
         boolean terminalEventReceived = false;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {

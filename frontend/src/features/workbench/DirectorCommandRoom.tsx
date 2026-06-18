@@ -16,8 +16,8 @@ import {
   Upload,
   Wand2
 } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
-import { useLayoutEffect, useMemo, useState } from "react";
+import { motion } from "motion/react";
+import { useMemo } from "react";
 import type { SceneDetailViewModel } from "../../api/types";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -32,6 +32,13 @@ function sourceTone(source: string) {
   return "neutral";
 }
 
+function sceneStatusTone(status: string | undefined) {
+  if (status === "PASSED") return "green";
+  if (status === "FAILED") return "red";
+  if (status === "WARNING") return "amber";
+  return "neutral";
+}
+
 function formatElapsed(elapsedMs: number) {
   const totalSeconds = Math.floor(elapsedMs / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -39,58 +46,13 @@ function formatElapsed(elapsedMs: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function TypewrittenSceneContent({ scene }: { scene: SceneDetailViewModel | null }) {
-  const reducedMotion = useReducedMotion() ?? false;
-  const contentLength = useMemo(() => {
-    if (!scene) return 0;
-    return [
-      ...scene.action,
-      ...scene.dialogue.map((item) => `${item.characterId}${item.line}`)
-    ].reduce((total, line) => total + line.length + 1, 0);
-  }, [scene]);
-  const [visibleCharacters, setVisibleCharacters] = useState(contentLength);
-
-  useLayoutEffect(() => {
-    if (!scene || contentLength === 0 || reducedMotion) {
-      setVisibleCharacters(contentLength);
-      return;
-    }
-
-    setVisibleCharacters(0);
-    const step = Math.max(1, Math.ceil(contentLength / 110));
-    const handle = window.setInterval(() => {
-      setVisibleCharacters((current) => {
-        const next = Math.min(contentLength, current + step);
-        if (next >= contentLength) window.clearInterval(handle);
-        return next;
-      });
-    }, 22);
-    return () => window.clearInterval(handle);
-  }, [contentLength, reducedMotion, scene?.sceneId]);
-
-  let remaining = visibleCharacters;
-  const actions = (scene?.action ?? []).map((line) => {
-    const visible = line.slice(0, Math.max(0, remaining));
-    remaining -= line.length + 1;
-    return visible;
-  });
-  const dialogue = (scene?.dialogue ?? []).map((item) => {
-    const speaker = item.characterId.slice(0, Math.max(0, remaining));
-    remaining -= item.characterId.length;
-    const line = item.line.slice(0, Math.max(0, remaining));
-    remaining -= item.line.length + 1;
-    return { line, speaker };
-  });
-
+function SceneContent({ scene }: { scene: SceneDetailViewModel | null }) {
   return (
-    <div
-      className={`scene-detail-grid${visibleCharacters < contentLength ? " scene-detail-grid-typing" : ""}`}
-      aria-busy={visibleCharacters < contentLength}
-    >
+    <div className="scene-detail-grid">
       <div>
         <strong>动作</strong>
         <ul>
-          {actions.slice(0, 5).map((line, index) =>
+          {(scene?.action ?? []).slice(0, 5).map((line, index) =>
             line ? <li key={`${scene?.sceneId}-action-${index}`}>{line}</li> : null
           )}
         </ul>
@@ -98,10 +60,10 @@ function TypewrittenSceneContent({ scene }: { scene: SceneDetailViewModel | null
       <div>
         <strong>对白</strong>
         <ul>
-          {dialogue.slice(0, 4).map((item, index) =>
-            item.speaker || item.line ? (
+          {(scene?.dialogue ?? []).slice(0, 4).map((item, index) =>
+            item.characterId || item.line ? (
               <li key={`${scene?.sceneId}-dialogue-${index}`}>
-                {item.speaker ? <span>{item.speaker}</span> : null}
+                {item.characterId ? <span>{item.characterId}</span> : null}
                 {item.line}
               </li>
             ) : null
@@ -433,7 +395,14 @@ export function DirectorCommandRoom() {
         <aside className="right-console">
           <Panel
             title="Scene Inspector"
-            meta={<Badge tone={sourceTone(sources.sceneDetailSourceMode)}>{sources.sceneDetailSourceMode}</Badge>}
+            meta={
+              <div className="panel-meta-row">
+                <Badge tone={sourceTone(sources.sceneDetailSourceMode)}>{sources.sceneDetailSourceMode}</Badge>
+                <Badge tone={sceneStatusTone(selectedScene?.validationStatus)}>
+                  {selectedScene?.validationStatus ?? "PENDING"}
+                </Badge>
+              </div>
+            }
           >
             <div className="scene-title-block">
               <span>{state.selectedSceneId || "scene_pending"}</span>
@@ -445,12 +414,12 @@ export function DirectorCommandRoom() {
 
             {state.sceneStreamContent ? (
               <div className="stream-box">
-                <strong>AI 流式预览</strong>
+                <strong>AI 正式生成流</strong>
                 <pre>{state.sceneStreamContent}</pre>
               </div>
             ) : null}
 
-            <TypewrittenSceneContent scene={selectedScene} />
+            <SceneContent scene={selectedScene} />
 
             <div className="source-ref-strip">
               {(selectedScene?.sourceRefs ?? []).map((ref) => (
