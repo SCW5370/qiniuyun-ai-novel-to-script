@@ -1196,14 +1196,17 @@ export function useWorkbench() {
       return;
     }
 
+    const selectedSceneStillExists = outlineScenes.some((scene) => scene.sceneId === selectedSceneId);
+    if (selectedSceneStillExists) {
+      return;
+    }
+
     const revealedScenes = outlineScenes
       .slice()
       .sort((left, right) => left.seqNo - right.seqNo)
       .filter((scene) => revealedSceneIds.has(scene.sceneId));
 
-    if (!revealedScenes.some((scene) => scene.sceneId === selectedSceneId)) {
-      setSelectedSceneId(revealedScenes[0]?.sceneId ?? "");
-    }
+    setSelectedSceneId(revealedScenes[0]?.sceneId ?? "");
   }, [outlineScenes, revealedSceneIds, selectedSceneId, setSelectedSceneId]);
 
   useEffect(() => {
@@ -1212,11 +1215,6 @@ export function useWorkbench() {
       (scene) => readySceneIds.has(scene.sceneId) && !revealedSceneIds.has(scene.sceneId)
     );
     if (!nextScene) return;
-    const nextSceneIndex = orderedScenes.findIndex((scene) => scene.sceneId === nextScene.sceneId);
-    const continuesMainline = orderedScenes
-      .slice(0, nextSceneIndex)
-      .every((scene) => revealedSceneIds.has(scene.sceneId));
-
     const handle = window.setTimeout(() => {
       setRevealedSceneIds((current) => {
         if (current.has(nextScene.sceneId)) return current;
@@ -1224,13 +1222,13 @@ export function useWorkbench() {
         next.add(nextScene.sceneId);
         return next;
       });
-      if (continuesMainline) {
+      if (!selectedSceneId) {
         setSelectedSceneId(nextScene.sceneId);
       }
     }, 180);
 
     return () => window.clearTimeout(handle);
-  }, [outlineScenes, readySceneIds, revealedSceneIds, setSelectedSceneId]);
+  }, [outlineScenes, readySceneIds, revealedSceneIds, selectedSceneId, setSelectedSceneId]);
 
   useEffect(() => {
     if (connectionMode !== "connected" || !isSceneBuildActive) return;
@@ -1243,11 +1241,23 @@ export function useWorkbench() {
       try {
         const scripts = await listProjectScenes(project.projectId);
         if (cancelled) return;
+        const generatedIds = new Set(scripts.map((scene) => scene.sceneId));
         setReadySceneIds((current) => {
           const next = new Set(current);
-          scripts.forEach((scene) => next.add(scene.sceneId));
+          generatedIds.forEach((sceneId) => next.add(sceneId));
           return next.size === current.size ? current : next;
         });
+        if (
+          selectedSceneId &&
+          generatedIds.has(selectedSceneId)
+        ) {
+          const detail = await getProjectScene(project.projectId, selectedSceneId);
+          if (!cancelled) {
+            setSceneDetail(detail);
+            setSceneDetailSourceMode("real");
+            setSceneDetailMessage("已读取真实 Scene。");
+          }
+        }
       } catch {
         // SSE 仍是主通道；轮询只负责断线或漏事件后的状态自愈。
       } finally {
@@ -1261,7 +1271,7 @@ export function useWorkbench() {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [connectionMode, isSceneBuildActive, project.projectId]);
+  }, [connectionMode, isSceneBuildActive, project.projectId, selectedSceneId]);
 
   useEffect(() => {
     return () => {

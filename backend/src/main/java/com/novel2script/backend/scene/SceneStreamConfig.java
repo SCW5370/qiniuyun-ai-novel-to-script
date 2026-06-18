@@ -34,16 +34,18 @@ public class SceneStreamConfig {
     // 可把总时长压到接近"单场景耗时×批次数"，同时把对模型的并发控制在可控范围内。
     @Bean(name = "sceneScriptExecutor")
     public ThreadPoolTaskExecutor sceneScriptExecutor(
-            @Value("${SCENE_SCRIPT_CONCURRENCY:4}") int concurrency
+            @Value("${SCENE_SCRIPT_CONCURRENCY:4}") int concurrency,
+            @Value("${SCENE_SCRIPT_QUEUE_CAPACITY:100}") int queueCapacity
     ) {
         int bounded = Math.max(1, concurrency);
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(bounded);
         executor.setMaxPoolSize(bounded);
-        executor.setQueueCapacity(Integer.MAX_VALUE);
+        executor.setQueueCapacity(Math.max(0, queueCapacity));
         executor.setThreadNamePrefix("scene-script-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return executor;
     }

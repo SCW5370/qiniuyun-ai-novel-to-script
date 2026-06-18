@@ -150,9 +150,7 @@ public class SceneGenerationService {
         }
 
         List<StoryEntity> entities = storyEntityMapper.findByProjectId(projectId);
-        Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
-                .map(SceneScript::getSceneId)
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> generatedSceneIds = generatedUsableSceneIds(projectId);
         List<Future<SceneScript>> futures = new ArrayList<>();
         List<String> submittedSceneIds = new ArrayList<>();
         List<OutlineScene> contextScenes = new ArrayList<>(existingScenes);
@@ -197,7 +195,7 @@ public class SceneGenerationService {
             sceneIds.addAll(handle.sceneIds);
             futures.addAll(handle.futures);
         }
-        waitForSceneGenerationTasks(projectId, sceneIds, futures);
+        SceneTaskReport taskReport = waitForSceneGenerationTasks(projectId, sceneIds, futures);
         reconcileOutlineAndSceneScriptOrder(projectId);
         projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
         List<SceneScriptResponse> scripts = listSceneScripts(projectId);
@@ -206,7 +204,7 @@ public class SceneGenerationService {
                 "completed",
                 100,
                 true,
-                "故事资产、场景大纲与 Scene 内容已逐章生成完成"
+                completionMessage("故事资产、场景大纲与 Scene 内容已逐章生成完成", taskReport)
         );
         return scripts;
     }
@@ -312,9 +310,7 @@ public class SceneGenerationService {
             if (outlineScenes.isEmpty()) {
                 return true;
             }
-            Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
-                    .map(SceneScript::getSceneId)
-                    .collect(java.util.stream.Collectors.toSet());
+            Set<String> generatedSceneIds = generatedUsableSceneIds(projectId);
             return outlineScenes.stream()
                     .map(OutlineScene::getSceneId)
                     .anyMatch(sceneId -> !generatedSceneIds.contains(sceneId));
@@ -339,9 +335,7 @@ public class SceneGenerationService {
             throw new IllegalArgumentException("请先生成场景大纲");
         }
 
-        Set<String> existingSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
-                .map(SceneScript::getSceneId)
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> existingSceneIds = generatedUsableSceneIds(projectId);
         List<String> missingSceneIds = outlineScenes.stream()
                 .map(OutlineScene::getSceneId)
                 .filter(sceneId -> !existingSceneIds.contains(sceneId))
@@ -353,27 +347,22 @@ public class SceneGenerationService {
         for (String sceneId : missingSceneIds) {
             futures.add(sceneScriptExecutor.submit(() -> generateSceneScript(projectId, sceneId, false)));
         }
-        for (int i = 0; i < missingSceneIds.size(); i++) {
-            try {
-                futures.get(i).get();
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                futures.forEach(future -> future.cancel(true));
-                throw new IllegalStateException("Scene 剧本生成被中断: projectId=" + projectId + ", sceneId=" + missingSceneIds.get(i), ex);
-            } catch (ExecutionException ex) {
-                Throwable cause = ex.getCause();
-                throw new IllegalStateException("Scene 剧本生成失败: projectId=" + projectId + ", sceneId=" + missingSceneIds.get(i),
-                        cause != null ? cause : ex);
-            }
-        }
+        SceneTaskReport taskReport = waitForSceneGenerationTasks(projectId, missingSceneIds, futures);
 
         projectService.updateStatus(projectId, ProjectStatus.COMPLETED);
         List<SceneScriptResponse> scripts = listSceneScripts(projectId);
-        progressEventPublisher.jobCompleted(projectId, "completed", 100, true, "全部 Scene 剧本已按顺序生成");
+        progressEventPublisher.jobCompleted(
+                projectId,
+                "completed",
+                100,
+                true,
+                completionMessage("全部 Scene 剧本已按顺序生成", taskReport)
+        );
         log.info(
-                "缺失 Scene 剧本生成完成: projectId={}, scriptCount={}, elapsedMs={}",
+                "缺失 Scene 剧本生成完成: projectId={}, scriptCount={}, failedCount={}, elapsedMs={}",
                 projectId,
                 scripts.size(),
+                taskReport.failedCount(),
                 System.currentTimeMillis() - startedAt
         );
         return scripts;
@@ -403,9 +392,7 @@ public class SceneGenerationService {
         List<StoryEvent> eventsToOutline = incremental || !existingScenes.isEmpty()
                 ? findPendingOutlineEvents(existingScenes, allEvents)
                 : allEvents;
-        Set<String> generatedSceneIds = sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
-                .map(SceneScript::getSceneId)
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> generatedSceneIds = generatedUsableSceneIds(projectId);
         List<Future<SceneScript>> sceneFutures = new ArrayList<>();
         List<String> submittedSceneIds = new ArrayList<>();
         List<OutlineScene> contextScenes = new ArrayList<>(existingScenes);
@@ -446,7 +433,7 @@ public class SceneGenerationService {
                 sceneFutures,
                 submittedSceneIds
         );
-        waitForSceneGenerationTasks(projectId, submittedSceneIds, sceneFutures);
+        SceneTaskReport taskReport = waitForSceneGenerationTasks(projectId, submittedSceneIds, sceneFutures);
 
         if (incremental) {
             reconcileOutlineAndSceneScriptOrder(projectId);
@@ -458,14 +445,15 @@ public class SceneGenerationService {
                 "completed",
                 100,
                 true,
-                "场景分析与 Scene 内容已逐批生成完成"
+                completionMessage("场景分析与 Scene 内容已逐批生成完成", taskReport)
         );
         log.info(
-                "场景生产流水线完成: projectId={}, incremental={}, outlineCount={}, scriptCount={}, elapsedMs={}",
+                "场景生产流水线完成: projectId={}, incremental={}, outlineCount={}, scriptCount={}, failedCount={}, elapsedMs={}",
                 projectId,
                 incremental,
                 contextScenes.size(),
                 scripts.size(),
+                taskReport.failedCount(),
                 System.currentTimeMillis() - startedAt
         );
         return scripts;
@@ -495,28 +483,95 @@ public class SceneGenerationService {
         }
     }
 
-    private void waitForSceneGenerationTasks(
+    private SceneTaskReport waitForSceneGenerationTasks(
             String projectId,
             List<String> sceneIds,
             List<Future<SceneScript>> futures
     ) {
+        List<String> failedSceneIds = new ArrayList<>();
         for (int i = 0; i < futures.size(); i++) {
+            String sceneId = i < sceneIds.size() ? sceneIds.get(i) : "UNKNOWN";
             try {
                 futures.get(i).get();
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 futures.forEach(future -> future.cancel(true));
                 throw new IllegalStateException(
-                        "Scene 生产流水线被中断: projectId=" + projectId + ", sceneId=" + sceneIds.get(i),
+                        "Scene 生产流水线被中断: projectId=" + projectId + ", sceneId=" + sceneId,
                         ex
                 );
             } catch (ExecutionException ex) {
                 Throwable cause = ex.getCause();
-                throw new IllegalStateException(
-                        "Scene 生产流水线失败: projectId=" + projectId + ", sceneId=" + sceneIds.get(i),
-                        cause != null ? cause : ex
+                Throwable failure = cause != null ? cause : ex;
+                failedSceneIds.add(sceneId);
+                log.warn(
+                        "Scene 生产任务失败，写入失败占位并继续等待其他 Scene: projectId={}, sceneId={}, reason={}",
+                        projectId,
+                        sceneId,
+                        rootCauseMessage(failure)
                 );
+                SceneScript failedScene = persistFailedSceneScript(projectId, sceneId, failure);
+                progressEventPublisher.sceneDone(projectId, sceneId, failedScene.getValidationStatus());
             }
+        }
+        return new SceneTaskReport(futures.size(), failedSceneIds);
+    }
+
+    private Set<String> generatedUsableSceneIds(String projectId) {
+        return sceneScriptMapper.findByProjectIdOrderBySeqNoAsc(projectId).stream()
+                .filter(scene -> !"FAILED".equalsIgnoreCase(scene.getValidationStatus()))
+                .map(SceneScript::getSceneId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private SceneScript persistFailedSceneScript(String projectId, String sceneId, Throwable failure) {
+        SceneScript existingScene = sceneScriptMapper.findByProjectIdAndSceneId(projectId, sceneId).orElse(null);
+        if (existingScene != null && !"FAILED".equalsIgnoreCase(existingScene.getValidationStatus())) {
+            return existingScene;
+        }
+
+        OutlineScene outlineScene = outlineSceneMapper.findByProjectIdAndSceneId(projectId, sceneId)
+                .orElseThrow(() -> new IllegalStateException("无法写入失败占位，场景大纲不存在: " + sceneId, failure));
+        SceneScript failedScene = buildFailedSceneScript(projectId, outlineScene, rootCauseMessage(failure));
+        SceneScript savedScene = writeTransactionTemplate.execute(
+                status -> saveGeneratedSceneScript(projectId, sceneId, failedScene)
+        );
+        if (savedScene == null) {
+            throw new IllegalStateException("无法保存失败 Scene 占位: " + sceneId, failure);
+        }
+        return savedScene;
+    }
+
+    private SceneScript buildFailedSceneScript(String projectId, OutlineScene outlineScene, String reason) {
+        return new SceneScript(
+                projectId,
+                outlineScene.getSceneId(),
+                outlineScene.getSeqNo(),
+                outlineScene.getTitle(),
+                toJson(List.of(
+                        outlineScene.getPurposePlot(),
+                        "当前 Scene 生成失败，系统已保留失败占位，后续可单独重新生成。"
+                )),
+                toJson(List.of()),
+                outlineScene.getSourceRefsJson(),
+                "FAILED",
+                toJson(List.of("Scene 生成失败：" + reason))
+        );
+    }
+
+    private String completionMessage(String successMessage, SceneTaskReport taskReport) {
+        if (taskReport.failedCount() == 0) {
+            return successMessage;
+        }
+        return successMessage + "，其中 " + taskReport.failedCount()
+                + " 个 Scene 生成失败，已写入失败占位，可单独重试："
+                + String.join("、", taskReport.failedSceneIds());
+    }
+
+    private record SceneTaskReport(int totalCount, List<String> failedSceneIds) {
+
+        private int failedCount() {
+            return failedSceneIds.size();
         }
     }
 
@@ -717,7 +772,7 @@ public class SceneGenerationService {
         return sceneScriptMapper.findByProjectIdAndSceneId(projectId, sceneId).orElse(sceneScript);
     }
 
-    private String rootCauseMessage(Exception ex) {
+    private String rootCauseMessage(Throwable ex) {
         Throwable current = ex;
         while (current.getCause() != null) {
             current = current.getCause();
