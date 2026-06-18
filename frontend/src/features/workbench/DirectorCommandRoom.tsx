@@ -414,7 +414,7 @@ export function DirectorCommandRoom() {
 
             {state.sceneStreamContent ? (
               <div className="stream-box">
-                <strong>AI 流式预览</strong>
+                <strong>AI 正式生成流</strong>
                 <pre>{state.sceneStreamContent}</pre>
               </div>
             ) : null}

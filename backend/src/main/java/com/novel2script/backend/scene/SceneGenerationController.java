@@ -53,7 +53,7 @@ public class SceneGenerationController {
     }
 
     @GetMapping("/scenes/{sceneId}/stream")
-    public SseEmitter streamScenePreview(@PathVariable String projectId, @PathVariable String sceneId) {
-        return sceneGenerationService.streamScenePreview(projectId, sceneId);
+    public SseEmitter streamSceneScript(@PathVariable String projectId, @PathVariable String sceneId) {
+        return sceneGenerationService.streamSceneScript(projectId, sceneId);
     }
 }
