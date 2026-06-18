@@ -1042,6 +1042,18 @@ textarea {
   box-shadow: 0 0 0 1px rgba(37, 228, 244, 0.16);
 }
 
+.map-node-label-hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(8, 14, 20, 0.96);
+  color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  /* 标签由小球的 pointerOver 驱动；让标签本身不吃指针事件，鼠标移到标签上不会触发小球 pointerOut，
+     从而避免悬停标签的经典闪烁。点击仍由其下方的透明命中球接管。 */
+  pointer-events: none;
+  z-index: 5;
+}
+
 .production-map-mobile {
   display: none;
 }

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.novel2script.backend.ai.AiChatClient;
 import com.novel2script.backend.source.SourceChapter;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -14,6 +16,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 @Component
 public class AiStoryAssetExtractor {
@@ -26,23 +30,43 @@ public class AiStoryAssetExtractor {
 
     private final ObjectMapper objectMapper;
 
-    public AiStoryAssetExtractor(AiChatClient aiChatClient, ObjectMapper objectMapper) {
+    private final ThreadPoolTaskExecutor storyAssetExecutor;
+
+    public AiStoryAssetExtractor(
+            AiChatClient aiChatClient,
+            ObjectMapper objectMapper,
+            @Qualifier("storyAssetExecutor") ThreadPoolTaskExecutor storyAssetExecutor
+    ) {
         this.aiChatClient = aiChatClient;
         this.objectMapper = objectMapper;
+        this.storyAssetExecutor = storyAssetExecutor;
     }
 
     public Result extract(String projectId, List<SourceChapter> chapters) {
         try {
+            List<List<SourceChapter>> batches = buildChapterBatches(chapters);
+            List<Future<BatchAssets>> futures = new ArrayList<>(batches.size());
+            for (List<SourceChapter> batch : batches) {
+                futures.add(storyAssetExecutor.submit(() -> extractBatch(projectId, batch)));
+            }
+
             List<StoryEntity> collectedEntities = new ArrayList<>();
             List<StoryEvent> collectedEvents = new ArrayList<>();
-            for (List<SourceChapter> batch : buildChapterBatches(chapters)) {
-                String response = aiChatClient.completeJson(
-                        "你是小说剧本化系统的故事资产分析助手。只返回合法 JSON，不要输出解释。",
-                        buildPrompt(batch)
-                );
-                JsonNode root = objectMapper.readTree(response);
-                collectedEntities.addAll(parseEntities(projectId, root.path("entities")));
-                collectedEvents.addAll(parseEvents(projectId, batch, root.path("events")));
+            for (int i = 0; i < futures.size(); i++) {
+                BatchAssets batchAssets;
+                try {
+                    batchAssets = futures.get(i).get();
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    futures.forEach(future -> future.cancel(true));
+                    throw new IllegalStateException("AI 故事资产抽取被中断: projectId=" + projectId, ex);
+                } catch (ExecutionException ex) {
+                    Throwable cause = ex.getCause();
+                    throw new IllegalStateException("AI 故事资产抽取失败: projectId=" + projectId,
+                            cause != null ? cause : ex);
+                }
+                collectedEntities.addAll(batchAssets.entities());
+                collectedEvents.addAll(batchAssets.events());
             }
 
             List<StoryEntity> entities = normalizeEntities(projectId, collectedEntities);
@@ -51,9 +75,26 @@ public class AiStoryAssetExtractor {
                 throw new IllegalStateException("AI 故事资产为空");
             }
             return new Result(entities, events);
+        } catch (IllegalStateException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new IllegalStateException("AI 故事资产抽取失败", ex);
         }
+    }
+
+    private BatchAssets extractBatch(String projectId, List<SourceChapter> batch) throws Exception {
+        String response = aiChatClient.completeJson(
+                "你是小说剧本化系统的故事资产分析助手。只返回合法 JSON，不要输出解释。",
+                buildPrompt(batch)
+        );
+        JsonNode root = objectMapper.readTree(response);
+        return new BatchAssets(
+                parseEntities(projectId, root.path("entities")),
+                parseEvents(projectId, batch, root.path("events"))
+        );
+    }
+
+    private record BatchAssets(List<StoryEntity> entities, List<StoryEvent> events) {
     }
 
     private List<List<SourceChapter>> buildChapterBatches(List<SourceChapter> chapters) {

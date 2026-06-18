@@ -1,7 +1,7 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Html, Line, OrbitControls, Sparkles } from "@react-three/drei";
 import { useReducedMotion } from "motion/react";
-import { memo, useMemo, useRef } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import { Color, Group, MathUtils, MeshStandardMaterial, MOUSE, Vector3 } from "three";
 import type {
   ChapterViewModel,
@@ -88,6 +88,39 @@ function averageSceneX(sceneIds: string[], nodesById: Map<string, MapNode>, fall
   return points.reduce((total, value) => total + value, 0) / points.length;
 }
 
+// 通用分道布局：按锚点 X 从左到右扫描，强制相邻节点至少间隔 minGap（约一个节点直径），
+// 再整体重新居中回到锚点均值，并对相邻节点做奇偶纵向错位。既保留"对齐到所属场景"的语义，
+// 又在物理上彻底消除同一条带内的堆叠。事件、角色、地点三条带共用同一套逻辑。
+function resolveLaneLayout(
+  anchors: number[],
+  minGap: number,
+  baseY: number,
+  staggerY: number
+): { x: number[]; y: number[] } {
+  const count = anchors.length;
+  const x = new Array<number>(count).fill(0);
+  const y = new Array<number>(count).fill(baseY);
+  const ordered = anchors
+    .map((anchorX, index) => ({ index, anchorX }))
+    .sort((left, right) => left.anchorX - right.anchorX);
+  let lastX = Number.NEGATIVE_INFINITY;
+  ordered.forEach((item, rank) => {
+    const nextX = Math.max(item.anchorX, lastX + minGap);
+    x[item.index] = nextX;
+    y[item.index] = baseY + (rank % 2 === 0 ? 0 : staggerY);
+    lastX = nextX;
+  });
+  if (count > 0) {
+    const anchorMean = anchors.reduce((total, value) => total + value, 0) / count;
+    const resolvedMean = x.reduce((total, value) => total + value, 0) / count;
+    const recenterShift = anchorMean - resolvedMean;
+    for (let i = 0; i < count; i++) {
+      x[i] += recenterShift;
+    }
+  }
+  return { x, y };
+}
+
 function buildStorylineGraph({
   chapters,
   entities,
@@ -157,56 +190,42 @@ function buildStorylineGraph({
     return averageSceneX(relatedSceneIds, nodesById, fallbackX);
   });
 
-  // 按 X 从左到右扫描，强制相邻事件至少间隔 eventMinGap（约一个节点直径），再整体重新居中，
-  // 并对相邻事件做奇偶纵向错位，既保留"事件对齐到所属场景"的语义，又彻底消除堆叠与标签重叠。
-  const eventMinGap = 0.36;
-  const eventBaseY = 0.68;
-  const resolvedEventX: number[] = new Array(boundedEvents.length).fill(0);
-  const resolvedEventY: number[] = new Array(boundedEvents.length).fill(eventBaseY);
-  const sortedEventsByX = eventAnchors
-    .map((anchorX, index) => ({ index, anchorX }))
-    .sort((left, right) => left.anchorX - right.anchorX);
-  let lastEventX = Number.NEGATIVE_INFINITY;
-  sortedEventsByX.forEach((item, rank) => {
-    const x = Math.max(item.anchorX, lastEventX + eventMinGap);
-    resolvedEventX[item.index] = x;
-    resolvedEventY[item.index] = eventBaseY + (rank % 2 === 0 ? 0 : 0.22);
-    lastEventX = x;
-  });
-  if (boundedEvents.length > 0) {
-    const anchorMean = eventAnchors.reduce((total, value) => total + value, 0) / boundedEvents.length;
-    const resolvedMean = resolvedEventX.reduce((total, value) => total + value, 0) / boundedEvents.length;
-    const recenterShift = anchorMean - resolvedMean;
-    for (let i = 0; i < resolvedEventX.length; i++) {
-      resolvedEventX[i] += recenterShift;
-    }
-  }
-
+  const eventLayout = resolveLaneLayout(eventAnchors, 0.36, 0.68, 0.22);
   const eventNodes = boundedEvents.map((event, index) => ({
     id: event.eventId,
     label: `E${event.eventOrder}`,
     kind: "event" as const,
-    position: [resolvedEventX[index], resolvedEventY[index], -0.75] as [number, number, number],
+    position: [eventLayout.x[index], eventLayout.y[index], -0.75] as [number, number, number],
     title: event.title
   }));
   eventNodes.forEach((node) => nodesById.set(node.id, node));
 
-  const entityNodes = entities.slice(0, 12).map((entity, index) => {
-    const relatedSceneIds = orderedScenes
-      .filter((scene) => scene.characters.includes(entity.entityId) || scene.slugline.locationId === entity.entityId)
-      .map((scene) => scene.sceneId);
-    const fallbackX = (index - (Math.min(entities.length, 12) - 1) / 2) * 0.74;
-    const x = averageSceneX(relatedSceneIds, nodesById, fallbackX) + ((index % 2) - 0.5) * 0.18;
-    const isLocation = entity.entityType === "LOCATION";
-    return {
+  // 角色与地点各占一条独立横带，分别做与事件相同的去碰撞分道。原实现里所有角色共用同一 Y/Z、
+  // X 又都取"关联场景的平均值"，短篇里几乎每个实体都关联到全部场景 → 平均值塌缩到同一点，
+  // 于是角色名、地点名整排互相覆盖。这里按所属场景给出锚点后强制最小间距，物理上分开。
+  const boundedEntities = entities.slice(0, 12);
+  const buildEntityLane = (group: StoryEntityViewModel[], baseY: number, z: number, staggerY: number) => {
+    const anchors = group.map((entity, index) => {
+      const relatedSceneIds = orderedScenes
+        .filter((scene) => scene.characters.includes(entity.entityId) || scene.slugline.locationId === entity.entityId)
+        .map((scene) => scene.sceneId);
+      const fallbackX = (index - (Math.max(group.length, 1) - 1) / 2) * 0.6;
+      return averageSceneX(relatedSceneIds, nodesById, fallbackX);
+    });
+    const layout = resolveLaneLayout(anchors, 0.5, baseY, staggerY);
+    return group.map((entity, index) => ({
       id: entity.entityId,
       label: entity.canonicalName.slice(0, 8),
       kind: "entity" as const,
-      position: [x, isLocation ? -1.08 : -0.82, isLocation ? 1.42 : 0.92] as [number, number, number],
+      position: [layout.x[index], layout.y[index], z] as [number, number, number],
       title: entity.canonicalName,
       entityType: entity.entityType
-    };
-  });
+    }));
+  };
+  const entityNodes = [
+    ...buildEntityLane(boundedEntities.filter((entity) => entity.entityType !== "LOCATION"), -0.78, 0.92, -0.2),
+    ...buildEntityLane(boundedEntities.filter((entity) => entity.entityType === "LOCATION"), -1.26, 1.42, -0.2)
+  ];
   entityNodes.forEach((node) => nodesById.set(node.id, node));
 
   for (const chapter of chapters.slice(0, 8)) {
@@ -377,9 +396,15 @@ function AnimatedMapNode({
 }) {
   const groupRef = useRef<Group>(null);
   const materialRef = useRef<MeshStandardMaterial>(null);
+  const [hovered, setHovered] = useState(false);
   const baseScale = nodeScale(node, selected, inContext);
   const isGhost = node.kind === "scene" && !isRevealed;
-  const targetScale = baseScale * (isGhost ? 0.56 : 1);
+  const targetScale = baseScale * (isGhost ? 0.56 : 1) * (hovered && !isGhost ? 1.12 : 1);
+
+  // 焦点+上下文标签策略：Scene 序号始终显示（主线可读 + 可点）；章节/事件/角色/地点平时只留发光圆点，
+  // 仅当它所属的场景被选中（inContext）、节点本身被选中、或鼠标悬停时才浮出标签。
+  // 默认视图因此只剩"主线序号 + 彩色光点"，一眼能读懂结构，又不丢任何信息。
+  const showLabel = node.kind === "scene" || selected || inContext || hovered;
 
   useFrame((_, delta) => {
     if (groupRef.current) {
@@ -393,7 +418,15 @@ function AnimatedMapNode({
       materialRef.current.opacity = reducedMotion
         ? targetOpacity
         : MathUtils.damp(materialRef.current.opacity, targetOpacity, 8, delta);
-      const targetEmissive = isGhost ? 0.08 : selected ? 1.55 : inContext ? 0.78 : 0.36;
+      const targetEmissive = isGhost
+        ? 0.08
+        : selected
+          ? 1.55
+          : inContext
+            ? 0.78
+            : hovered
+              ? 0.92
+              : 0.36;
       materialRef.current.emissiveIntensity = reducedMotion
         ? targetEmissive
         : MathUtils.damp(materialRef.current.emissiveIntensity, targetEmissive, 8, delta);
@@ -404,16 +437,26 @@ function AnimatedMapNode({
   const labelClasses = [labelClassName(node, selected, inContext)];
   if (isGhost) labelClasses.push("map-node-label-ghost");
   if (node.kind === "scene" && isRevealed) labelClasses.push("map-node-label-revealed");
+  if (hovered && !selected && !inContext) labelClasses.push("map-node-label-hover");
 
   return (
     <group ref={groupRef} position={node.position} scale={targetScale}>
       {selected && isRevealed ? <SelectedSceneHalo /> : null}
       <mesh
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          setHovered(true);
+        }}
+        onPointerOut={() => setHovered(false)}
         onClick={(event) => {
           event.stopPropagation();
           if (node.kind === "scene" && isRevealed) setSelectedSceneId(node.id);
         }}
       >
+        <sphereGeometry args={[Math.max(nodeRadius(node) * 2.4, 0.28), 16, 16]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh>
         <sphereGeometry args={[nodeRadius(node), 32, 32]} />
         <meshStandardMaterial
           ref={materialRef}
@@ -426,19 +469,21 @@ function AnimatedMapNode({
           transparent
         />
       </mesh>
-      <Html center distanceFactor={8}>
-        <button
-          className={labelClasses.join(" ")}
-          disabled={node.kind !== "scene" || !isRevealed}
-          title={isGhost ? `${node.title ?? node.label}，等待内容生成` : node.title ?? node.label}
-          type="button"
-          onClick={() => {
-            if (node.kind === "scene" && isRevealed) setSelectedSceneId(node.id);
-          }}
-        >
-          {node.label}
-        </button>
-      </Html>
+      {showLabel ? (
+        <Html center distanceFactor={8}>
+          <button
+            className={labelClasses.join(" ")}
+            disabled={node.kind !== "scene" || !isRevealed}
+            title={isGhost ? `${node.title ?? node.label}，等待内容生成` : node.title ?? node.label}
+            type="button"
+            onClick={() => {
+              if (node.kind === "scene" && isRevealed) setSelectedSceneId(node.id);
+            }}
+          >
+            {node.label}
+          </button>
+        </Html>
+      ) : null}
     </group>
   );
 }
