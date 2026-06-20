@@ -1,0 +1,7 @@
+section,param,v0,current,note
+reliability,p=0.01_N10,90.5,99.9,never_crash_100pct
+reliability,p=0.03_N10,73.9,99.1,never_crash_100pct
+reliability,p=0.05_N10,59.8,97.5,never_crash_100pct
+reliability,p=0.10_N10,34.8,90.4,never_crash_100pct
+ttfb,scene_first_paint,12.0s,700ms,perceived_17.1x
+db_conn,hold_time,12.0s,200ms,starved_v0=6_cur=0

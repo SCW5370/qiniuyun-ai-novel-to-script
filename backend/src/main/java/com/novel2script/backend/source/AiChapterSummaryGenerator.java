@@ -31,7 +31,7 @@ public class AiChapterSummaryGenerator implements ChapterSummaryGenerator {
     @Override
     public String generate(SourceChapter chapter) {
         try {
-            String response = aiChatClient.completeJson(
+            String response = aiChatClient.completeJsonCheap(
                     "你是小说剧本化系统的阅读分析助手。只返回合法 JSON，不要输出解释。",
                     buildPrompt(chapter)
             );

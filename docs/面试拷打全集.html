@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AI 小说转剧本 · 答辩拷打全集(按真实 format · 含示范回答)</title>
+<style>
+  :root{--ink:#16202b;--muted:#5b6b7a;--accent:#0c8f9c;--accent2:#c2792b;--line:#d9e2ea;--soft:#f1f6f8;--bad:#b23a48;--good:#1d7a52;--cy:#5fd3df;}
+  *{box-sizing:border-box;}
+  html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;color:var(--ink);margin:0;line-height:1.68;font-size:12.5px;}
+  .page{padding:22mm 18mm;page-break-after:always;position:relative;}
+  .page:last-child{page-break-after:auto;}
+  .cover{background:linear-gradient(150deg,#06121a 0%,#0b2630 55%,#0c3942 100%);color:#eaf6f8;min-height:100vh;display:flex;flex-direction:column;justify-content:center;}
+  .cover .kicker{letter-spacing:4px;color:var(--cy);font-size:12px;text-transform:uppercase;}
+  .cover h1{font-size:32px;line-height:1.25;margin:14px 0 6px;font-weight:800;}
+  .cover h2{font-size:15.5px;font-weight:500;color:#9fd9e1;margin:0 0 24px;}
+  .cover .thesis{border-left:3px solid var(--cy);padding:6px 0 6px 16px;font-size:13px;color:#d6eef1;max-width:92%;}
+  .cover .meta{margin-top:30px;color:#7fb6c0;font-size:11px;}
+  h2.sec{font-size:19px;color:var(--accent);margin:0 0 4px;font-weight:800;border-bottom:2px solid var(--accent);padding-bottom:6px;}
+  .sec-sub{color:var(--muted);margin:6px 0 14px;font-size:12px;}
+  h3{font-size:14px;margin:16px 0 7px;color:var(--ink);border-left:3px solid var(--accent);padding-left:9px;}
+  p{margin:6px 0;}
+  strong{color:#0c2230;}
+  ul,ol{margin:5px 0;padding-left:18px;}
+  li{margin:3px 0;}
+  code{background:var(--soft);padding:1px 5px;border-radius:4px;font-size:11px;}
+  .qa{margin:10px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden;page-break-inside:avoid;}
+  .q{margin:0;padding:8px 12px;background:#eef5f7;color:#0c2230;font-weight:700;font-size:12.5px;border-left:4px solid var(--accent);}
+  .q .role{color:var(--accent);font-weight:800;}
+  .a{padding:8px 12px 10px;background:#fff;}
+  .a .lead{color:var(--good);font-weight:700;font-size:11.5px;}
+  .a.honest{background:#fdf6f0;}
+  .a.honest .lead{color:var(--accent2);}
+  .probe{color:var(--muted);font-size:11px;font-style:italic;margin-top:4px;}
+  .toc li{margin:5px 0;}
+  .toc .n{color:var(--accent);font-weight:800;display:inline-block;width:26px;}
+  .footer-num{position:absolute;bottom:10mm;right:18mm;color:var(--muted);font-size:10px;}
+  table{width:100%;border-collapse:collapse;margin:8px 0;font-size:11.5px;}
+  th,td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top;}
+  th{background:var(--soft);font-weight:700;}
+  .tag{display:inline-block;font-size:10px;padding:0 7px;border-radius:999px;background:var(--soft);color:var(--accent);border:1px solid var(--line);margin-left:6px;}
+  .ok{color:var(--good);font-weight:700;}.danger{color:var(--bad);font-weight:700;}
+  .card{border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin:11px 0;background:#fbfdfe;}
+  .card .lead{font-weight:800;color:var(--accent);font-size:13px;margin-bottom:4px;}
+</style>
+</head>
+<body>
+
+<!-- 封面 -->
+<section class="page cover">
+  <div class="kicker">七牛云实训营 · 项目答辩 · 备战手册</div>
+  <h1>AI 小说转剧本<br>答辩拷打全集</h1>
+  <h2>按真实答辩 format 重写 · 每题含示范回答</h2>
+  <div class="thesis">
+    这场答辩的真实形态:① 15 分钟讲项目(快则更短)→ ② 围绕产品提问(为什么选这个议题 +
+    带入使用者视角问"特殊情况你处理好了吗")→ ③ 反问环节(你问面试官)。
+    <strong>核心考察的是表达能力</strong>,不是八股、不是手撕、不是架构深挖。
+    本手册据此组织:选题动机 / 使用者视角 / 反问准备 / 表达技巧为主,八股算法压成附录。
+  </div>
+  <div class="meta">配合《路演讲稿》《量化报告》使用 · 数字分清"实测/建模" · 软肋先认边界</div>
+</section>
+
+<!-- 目录 -->
+<section class="page">
+  <h2 class="sec">目录</h2>
+  <ul class="toc" style="list-style:none;padding-left:0;font-size:13px;">
+    <li><span class="n">一</span> 这场答辩到底考什么(先对齐预期)</li>
+    <li><span class="n">二</span> 选题动机:「你为什么选这个议题?」★</li>
+    <li><span class="n">三</span> 使用者视角:「这种特殊情况你处理好了吗?」★核心</li>
+    <li><span class="n">四</span> 产品澄清类(给谁用 / 怎么用 / 和别人比)</li>
+    <li><span class="n">五</span> 反问环节:你该问面试官什么 ★</li>
+    <li><span class="n">六</span> 表达能力 · 临场技巧(重点考察项)★</li>
+    <li><span class="n">七</span> 工程亮点速答(评委若深问,精简不堆架构)</li>
+    <li><span class="n">八</span> 软素质 / 协作 / 职业</li>
+    <li><span class="n">附</span> 正式校招技术面才考的(八股/算法,压缩)</li>
+  </ul>
+  <div class="card">
+    <div class="lead">一句话定调</div>
+    <p style="margin-bottom:0;">面试官不是来挑你代码 bug 的,是来看<strong>你能不能把一个真问题、一个真产品、一段真工程,讲清楚、讲得让人信</strong>。所以:<strong>结论先行、讲人话、诚实、有取舍</strong>,比堆术语重要得多。</p>
+  </div>
+  <div class="footer-num">答辩拷打全集</div>
+</section>
+
+<!-- 一、考什么 -->
+<section class="page">
+  <h2 class="sec">一、这场答辩到底考什么</h2>
+  <p class="sec-sub">先把预期对齐,别准备错方向(别背八股、别刷题)。</p>
+  <table>
+    <tr><th style="width:24%">环节</th><th>真实形态</th><th>你要做的</th></tr>
+    <tr><td>① 项目介绍(~15min)</td><td>你讲,快则用不满。介绍产品 + 你们做的工程</td><td>按讲稿讲清"问题→怎么做→结果",控时、有节奏</td></tr>
+    <tr><td>② 产品向提问</td><td>经典「为什么选这个议题」+ 带入<strong>使用者视角</strong>问特殊情况"你处理好了吗"</td><td>站在用户角度答边界;处理了就讲怎么处理,没处理就诚实+说思路</td></tr>
+    <tr><td>③ 反问环节</td><td><strong>你问面试官</strong>(能否落地、职业建议、怎么追 AI 前沿)</td><td>问有质量、显诚意和热情的问题</td></tr>
+  </table>
+  <div class="card">
+    <div class="lead">核心考察 = 表达能力(不是技术深度)</div>
+    <p style="margin:0;">这意味着:<strong>① 不会深挖分布式/源码/八股</strong>(那是正式技术面);<strong>② 你能不能把技术翻译成人话、把复杂讲简单,是关键</strong>;③ 诚实和逻辑 &gt; 炫技。所以本手册把重心放在"怎么答得清楚、答得让评委点头",而不是"答得多深"。</p>
+  </div>
+  <p class="note" style="color:var(--muted);font-size:11px;">注:七牛<strong>正式校招技术面</strong>(另一场景,多轮 30–70min)确实会考八股/算法/系统设计——那部分压缩在最后附录,实训营答辩通常用不到。</p>
+  <div class="footer-num">一 · 考什么</div>
+</section>
+
+<!-- 二、选题动机 -->
+<section class="page">
+  <h2 class="sec">二、选题动机:「你为什么选这个议题?」</h2>
+  <p class="sec-sub">这是必问题。答案要让评委觉得"你看到了一个真问题",而不是"想练技术随便挑的"。</p>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 你们为什么选"AI 小说转剧本"这个题?</p>
+  <div class="a"><p class="lead">示范回答(结论先行 + 真痛点 + 我们的切入)</p>
+  <p>"因为我们看到一个正在爆发、但供给跟不上的真实缺口:<strong>微短剧和影视改编需求暴涨,但'把小说改成能开拍的剧本'这一段卡产能</strong>——编剧手工拆书写场景,一部要几天,接不住批量订单。市面上要么是通用大模型(给段文字、给不了可生产的结构),要么是纯人工(慢、贵)。我们想做的,是<strong>把这条'拆书→结构化剧本'的链路工程化:又快、又稳、还让人一眼看懂故事结构</strong>。选它,是因为它既是真需求,又有足够的工程深度让我们做出差异。"</p>
+  <p class="probe">考察:动机真不真、有没有想清楚价值。亮点:讲"真问题+市场缺口",不讲"我想试试 AI"。</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 这方向已经有人做了,你们凭什么?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"功能层面确实不稀奇,谁都能调个模型。我们的差异在<strong>工程把它做扎实</strong>:① 全书事件抽取、每个场景可溯源回原文,杜绝'魔改'(影视方最怕的);② 把串行链路做成有界并行,分钟级出片;③ 批量稳定,整本成功率从 60% 提到 98%。<strong>我们比的不是'有没有这个功能',是'能不能真的拿去用'。</strong>"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 你个人在这个项目里最想解决的那个点是什么?</p>
+  <div class="a"><p class="lead">示范回答(按你真实分工填,讲一个具体的)</p>
+  <p>"我最在意的是<strong>'演示/生产时不翻车'</strong>。一开始一个场景失败整本就废,批量根本没法用。我把它做成'单点隔离+重试+失败占位',还用蒙特卡洛把可靠性算成概率——这让我第一次体会到,<strong>把一个模糊的'稳不稳'变成一个能算、能验证的数字,是工程的乐趣。</strong>"(把动机讲成"一个具体的、你真投入过的点",比泛泛而谈更打动人。)</p></div></div>
+  <div class="footer-num">二 · 选题动机</div>
+</section>
+
+<!-- 三、使用者视角 -->
+<section class="page">
+  <h2 class="sec">三、使用者视角:「这种情况你处理好了吗?」</h2>
+  <p class="sec-sub">核心环节。评委会带入真实用户,问各种特殊/边界场景。处理了 → 讲怎么处理;没处理 → 诚实 + 给思路。下面 ✓=已处理,△=部分/边界。</p>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> ✓ 用户用到一半把网页关了 / 刷新了,任务白跑吗?</p>
+  <div class="a"><p class="lead">示范回答(这是强项)</p>
+  <p>"不会。我们是<strong>异步架构</strong>:任务提交后在后台可靠地跑,客户端断开也照常跑完并落库;用户刷新回来,靠实时进度流(SSE)和轮询能接着看到进度和结果。我们专门为'断连不丢结果'做过处理——这正是'能用'和'demo 玩具'的区别。"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> ✓ 用户对某一个场景生成得不满意,要全本重跑吗?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"不用。用户可以<strong>针对单个场景重新生成</strong>,而且是流式的——边生成边看到内容长出来,满意了就留下。不会因为一个场景不满意就浪费时间和成本重跑整本。"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> △ 用户传的小说没有"第一章"这种标记 / 格式很乱,怎么办?</p>
+  <div class="a honest"><p class="lead">诚实应答(部分处理 + 边界)</p>
+  <p>"我们的切章器会识别常见标题('第 X 章 / Chapter X / 数字编号'),<strong>识别不到时会把全文当作一章兜底,不会报错崩掉</strong>。但说实话,对完全无结构的乱文本,我们还做不到智能分段——这是已知边界,下一步可以用模型辅助切分。当前的设计原则是<strong>'识别不了也优雅降级,绝不崩'</strong>。"</p>
+  <p class="probe">考察:有没有想过脏输入。亮点:讲"优雅降级"的设计原则 + 诚实给边界。</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> △ 用户怎么知道 AI 没瞎编、没魔改原著?</p>
+  <div class="a"><p class="lead">示范回答(强项)</p>
+  <p>"这是我们重点解决的。每个生成场景都<strong>锚定到原著的真实事件、可以点回原文</strong>——事件是全书抽取的,不是只看前几章编的。用户能一眼核对'这个场景来自原著哪一段'。对影视改编,这种可溯源是能不能进正规流程的底线。"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> △ 不同题材(言情/悬疑/科幻/历史)都能处理吗?</p>
+  <div class="a honest"><p class="lead">诚实应答</p>
+  <p>"结构化的部分(人物、事件、场景、主线)是<strong>题材无关</strong>的,各类小说都能抽。风格化的剧本质量会依赖底层模型对该题材的理解。我们在中文白话小说上验证得比较充分;文言文、外文这些没专门优化,是适用范围的边界。我们没有夸口'什么都能转',而是讲清楚'最适合什么'。"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> △ 原著本身有敏感/暴力内容,生成会出问题吗?</p>
+  <div class="a honest"><p class="lead">诚实应答</p>
+  <p>"模型网关本身有内容审核,可能对某些内容拒答。我们的容错链路能接住——拒答会触发重试,仍不行就走规则兜底/失败占位,<strong>整本不会因此崩</strong>。但合规这块我们做的是'不崩+可降级',更严格的内容合规策略是要补的。"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> ✓ 两个人同时操作同一个项目、或手抖连点两次,会乱吗?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"不会。同一项目的写操作我们做了<strong>串行化锁 + 幂等去重</strong>:同一项目进行中的任务会被复用,重复点击不会重复跑、不会产生脏数据。(诚实补一句:这是单机版的保证,多实例部署时这块要升级成共享层的锁——是我们清楚的边界。)"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> △ 等几分钟用户会不会等不及跑掉?体验怎么保证?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"两手抓:一是<strong>真把它做快</strong>——并行把墙钟从几分钟压到更短;二是<strong>治体感</strong>——真流式让用户'边等边看内容生长'、进度实时可见,而不是干等一个转圈。我们区分了'真实快'和'感觉快',两个都做了。"</p></div></div>
+
+  <div class="card"><div class="lead">这一整页的答题公式</div>
+  <p style="margin:0;"><strong>已处理</strong>:"会发生 → 我们这样处理 → 结果/价值"。<strong>没处理</strong>:"这是个好问题,当前是这样的边界 → 我们的设计原则是优雅降级不崩 → 下一步可以这样补"。<strong>永远别硬说"都处理了",评委一追就穿;诚实划边界反而显成熟。</strong></p></div>
+  <div class="footer-num">三 · 使用者视角</div>
+</section>
+
+<!-- 四、产品澄清 -->
+<section class="page">
+  <h2 class="sec">四、产品澄清类</h2>
+  <p class="sec-sub">产品层面的问题(不是架构)。答得简单、清楚、像在给用户介绍。</p>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 这个产品到底给谁用?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"主要给<strong>已经持有 IP 的内容方</strong>:短剧制作公司、影视改编方、网文平台、以及编剧团队。我们不碰内容版权,做的是<strong>'拆书→剧本'的提效工具/引擎</strong>——帮他们把剧本准备从几天压到几分钟,把编剧从机械拆解里解放出来做创意。"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 生成的剧本能直接拍吗?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"定位是<strong>可拍摄的结构化初稿</strong>(场景、人物、事件、对白骨架),交编剧精修,不是直接成片。我们解放的是 80% 的机械拆解工作,创意打磨留给人。而且每个场景可溯源,编剧改起来有据可依。<strong>是人机协作,不是取代编剧。</strong>"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 和直接用 ChatGPT / 通用大模型有什么区别?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"通用模型给你一段文字,给不了<strong>可生产的结构 + 全书一致性 + 可溯源 + 批量稳定</strong>。我们做的是整条链路的工程:长篇一致性、人物事件不脱节、整本不翻车、还有 3D 故事地图辅助决策。<strong>护城河不在'调一次模型',在'把整条链路做快、做稳、可视化、可复现'。</strong>"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 产出怎么交给用户 / 怎么落地到他们的流程?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"现在支持<strong>结构化导出(YAML)</strong>,里面还会显式标出哪些场景生成失败/有警告,方便编剧定位补写;加上 3D 故事地图做结构总览。后续可以对接他们现有的剧本协作工具。"</p></div></div>
+  <div class="footer-num">四 · 产品澄清</div>
+</section>
+
+<!-- 五、反问环节 -->
+<section class="page">
+  <h2 class="sec">五、反问环节:你该问面试官什么</h2>
+  <p class="sec-sub">这是加分环节,问得好显诚意和热情。下面含你已想到的三个 + 我补的,每个都说明"为什么值得问"。</p>
+
+  <div class="qa"><p class="q"><span class="role">问 1.</span> "我们这个产品,在七牛/真实业务里有机会落地实战吗?"</p>
+  <div class="a"><p class="lead">为什么好</p>
+  <p>显示你<strong>关心产品的真实价值、不是为做而做</strong>,还顺势把话题引回你们项目的业务价值,让面试官帮你想落地场景(七牛有音视频+AIGC,正好能接)。是个聪明的"把球踢回强项"的问题。</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">问 2.</span> "能给一些职业生涯建议吗?像我这个阶段,该重点补什么?"</p>
+  <div class="a"><p class="lead">为什么好</p>
+  <p>显<strong>谦逊和成长心态</strong>,面试官大多愿意聊。听完<strong>认真回应一句</strong>("您说的 X 我确实欠缺,回去会补"),比单纯问完更好。</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">问 3.</span> "您平时是怎么获取最新 AI 进展的?有没有推荐的渠道?"</p>
+  <div class="a"><p class="lead">为什么好</p>
+  <p>显示<strong>你对前沿有热情、想持续学习</strong>(AI 岗最看重),也是个轻松、面试官爱答的问题,能把气氛聊暖。</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">问 4(备选).</span> "实训营/团队里,实习生通常能参与到多核心的系统?"</p>
+  <div class="a"><p class="lead">为什么好</p>
+  <p>显示你<strong>想做实事、想碰核心</strong>,而不是混经历。</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">问 5(备选).</span> "您看我们这个项目,如果只让我们再迭代一个方向,您会建议先做哪个?"</p>
+  <div class="a"><p class="lead">为什么好</p>
+  <p>显示<strong>开放、能听建议</strong>,还能从专家口中拿到真实改进方向。</p></div></div>
+
+  <div class="card"><div class="lead">反问的两条红线</div>
+  <p style="margin:0;">① <strong>别一上来问薪资/转正率/加班</strong>(放最后或别问);② <strong>别问"我有没有通过"</strong>(显得焦虑)。问<strong>成长、产品、前沿</strong>,稳赢。</p></div>
+  <div class="footer-num">五 · 反问环节</div>
+</section>
+
+<!-- 六、表达能力 -->
+<section class="page">
+  <h2 class="sec">六、表达能力 · 临场技巧(重点考察项)</h2>
+  <p class="sec-sub">既然核心考表达,这页可能比任何技术点都重要。下面是能直接用的招。</p>
+
+  <h3>讲清楚的 5 个硬技巧</h3>
+  <table>
+    <tr><th style="width:22%">技巧</th><th>怎么做</th></tr>
+    <tr><td><strong>结论先行</strong></td><td>先给答案/结果,再解释。"我们快了 2.47×——因为把串行调用做成了并行。"别让评委等你铺垫。</td></tr>
+    <tr><td><strong>讲人话/打比方</strong></td><td>把技术翻译成生活语言。"失败占位"="一道菜炒糊了,不掀整桌,先上别的、那道补做"。</td></tr>
+    <tr><td><strong>问题→做法→结果</strong></td><td>每个点都套这个三段式,天然有逻辑、有故事感。</td></tr>
+    <tr><td><strong>给数字</strong></td><td>"快很多"→"几天到几分钟、2.47×"。数字让人信,但要分清实测/建模。</td></tr>
+    <tr><td><strong>控时 + 留白</strong></td><td>15 分钟讲完留 buffer;说完一个点停一下,给评委消化和提问的空隙。</td></tr>
+  </table>
+
+  <h3>临场状态</h3>
+  <ul>
+    <li><strong>别照稿念</strong>——记住每页"一句话主张 + 一个数字 + 一个钩子",其余即兴,眼神看评委。</li>
+    <li><strong>节奏</strong>:开场 90 秒最重要,先抛"痛点 + 我们的不同",抓住注意力。</li>
+    <li><strong>两人讲</strong>:分工清楚不抢话;一人讲时另一人看评委反应、准备补位。一人讲就全念,去掉切换。</li>
+    <li><strong>被问住</strong>:别慌别编。"这点我们没深做,但相邻的 X 我们处理过……"——诚实承认 + 桥接回强项。</li>
+    <li><strong>语速</strong>:紧张会变快,刻意放慢、多停顿,显得从容。</li>
+  </ul>
+
+  <div class="card"><div class="lead">一个能救场的万能句式</div>
+  <p style="margin:0;">遇到不确定的问题:<strong>"这是个好问题。我的理解是……(给你能给的)。更深的部分我们当前是这样的边界……(诚实),下一步会……(方向)。"</strong> —— 既不卡壳,又显得想清楚了边界。表达能力的最高分,不是滴水不漏,是<strong>逻辑清楚 + 诚实从容</strong>。</p></div>
+  <div class="footer-num">六 · 表达能力</div>
+</section>
+
+<!-- 七、工程亮点速答 -->
+<section class="page">
+  <h2 class="sec">七、工程亮点速答(评委若深问)</h2>
+  <p class="sec-sub">万一评委是技术背景、想多聊两句工程,这里给"精简版"答法——点到为止,别堆架构术语。</p>
+
+  <table>
+    <tr><th style="width:24%">若被问</th><th>一句话答(口语版)</th></tr>
+    <tr><td>怎么变快的?</td><td>"整条链路本来是一个个排队调模型,我们把相互独立的几步并行起来,墙钟从几分钟压到分钟级(端到端 2.47×、场景阶段实测 3.61×)。"</td></tr>
+    <tr><td>为什么不全部并行?</td><td>"大纲那一步有先后依赖(后面要参考前面),强行并行会乱;所以我们<strong>故意保留它串行</strong>——知道哪里不能快,才是判断。"</td></tr>
+    <tr><td>怎么保证不翻车?</td><td>"单个场景失败不拖垮整本(隔离+重试+占位),断连后端照样跑完。我们用蒙特卡洛把整本成功率算出来:5% 故障率下从 60% 提到 98%。"</td></tr>
+    <tr><td>那个 3D 地图难在哪?</td><td>"短篇里几乎每个角色都关联所有场景,坐标会塌缩成一团、标签糊掉。我们写了去碰撞算法,把节点重叠从 100 对降到 0。"</td></tr>
+    <tr><td>成本怎么控?</td><td>"按阶段难度分级:简单的摘要/抽取用便宜模型,创意的场景/大纲用好模型。实测单本成本降 ~31%、质量没掉,简单阶段还顺带快了。"</td></tr>
+    <tr><td>怎么证明这些数字?</td><td>"我们写了可复现基准,还真跑了真实模型校准——建模预测 3.50×、线上实测 3.61×,能在我们机器上重跑。"</td></tr>
+  </table>
+  <p class="note" style="font-size:11px;color:var(--muted);">提醒:这是<strong>口语速答</strong>,不要主动展开成架构讲座(那会跑偏到"考表达"之外);评委想深挖再展开。涉及多实例/水平扩展的话题,老实说"当前单机验证、扩展是下一步",别硬撑。</p>
+  <div class="footer-num">七 · 工程亮点速答</div>
+</section>
+
+<!-- 八、软素质 -->
+<section class="page">
+  <h2 class="sec">八、软素质 / 协作 / 职业</h2>
+  <p class="sec-sub">用 STAR(情境-任务-行动-结果),结合真实经历,别空泛。</p>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 你们两个人怎么分工的?</p>
+  <div class="a"><p class="lead">示范回答(按真实填)</p>
+  <p>"按真实分工讲清楚谁负责什么——比如一人主攻后端工程(并行、容错、成本),一人主攻前端可视化(3D 地图、流式交互)+ 产品打磨。强调<strong>用 PR 协作、保留了完整的提交和踩坑记录</strong>(这正是评审看重的'过程痕迹')。"</p>
+  <p class="probe">考察:真实协作。七牛明确看重"多人 PR 提交记录 + 过程痕迹"——务必讲到。</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 做这个项目最大的收获 / 最难的坎?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"挑一个真实的。比如:'最难的是一开始把 AI 调用包在数据库事务里,压测时连接池很快被占满、全卡住;我们定位到是事务边界裹住了慢调用,拆开后连接占用从十几秒降到毫秒级。<strong>这让我学到:先看数据再下结论,别凭直觉调参。</strong>'"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 为什么来七牛?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"七牛在<strong>音视频、存储、大模型 infra</strong> 上工程积累深,正好是我项目踩过、也感兴趣的方向(我们就用了七牛的 AI 网关)。我看重能在真问题上把工程做扎实,这和我做项目的方式一致。"</p></div></div>
+
+  <div class="qa"><p class="q"><span class="role">Q.</span> 你的短板 / 职业规划?</p>
+  <div class="a"><p class="lead">示范回答</p>
+  <p>"(短板要真)'我的项目是单机验证的,<strong>大规模分布式的生产经验偏少</strong>——方案想清楚了,但没真正大规模落地过,所以特别想来七牛补这一课。'(规划)'三年内想成为能独立扛一个高并发后端系统、既懂业务也懂底层的工程师。'"</p></div></div>
+  <div class="footer-num">八 · 软素质</div>
+</section>
+
+<!-- 附录 八股 -->
+<section class="page">
+  <h2 class="sec">附录:正式校招技术面才考的(压缩)</h2>
+  <p class="sec-sub">实训营答辩通常不考这些;若你之后进七牛<strong>正式校招技术面</strong>(另一场景,多轮)才需要。这里只列高频提纲,要展开再说。</p>
+
+  <table>
+    <tr><th style="width:18%">板块</th><th>高频点(提纲)</th></tr>
+    <tr><td>并发/JUC</td><td>线程池 7 参数 + 4 拒绝策略;为什么不用 Executors;volatile/synchronized/AQS;ConcurrentHashMap 1.7→1.8。</td></tr>
+    <tr><td>JVM</td><td>堆分代 + GC(G1);OOM 排查(dump+MAT)。</td></tr>
+    <tr><td>MySQL</td><td>四隔离级别 + MVCC(undo log + ReadView,RC/RR 差异);B+ 树索引、回表、最左前缀;事务传播。</td></tr>
+    <tr><td>Redis</td><td>分布式锁(SET NX EX + Lua 释放 + 看门狗);缓存穿透/击穿/雪崩;持久化 RDB/AOF。<strong>注:本项目没用 Redis(锁是本地 ReentrantLock),别说成用了。</strong></td></tr>
+    <tr><td>MQ</td><td>不丢消息(confirm+持久化+手动 ack);重复消费靠消费幂等;Rabbit vs Kafka。</td></tr>
+    <tr><td>网络/OS</td><td>TCP 握手挥手、TIME_WAIT;HTTP/1.1/2/3;epoll;零拷贝;一致性哈希(七牛爱考)。</td></tr>
+    <tr><td>算法</td><td>反转链表、两数之和、LRU、合并区间、快排/Top-K、多机调度(呼应你的并行)。</td></tr>
+    <tr><td>系统设计</td><td>分布式限流、分布式 ID、长连接推送、转码流水线(七牛味)。</td></tr>
+  </table>
+  <div class="card"><div class="lead">两场景别搞混</div>
+  <p style="margin:0;"><strong>实训营项目答辩</strong> = 考表达 + 产品 + 工程判断(本手册一~八章);<strong>正式校招技术面</strong> = 才会深考这页的八股/算法。别在答辩里背八股(跑偏),也别在技术面里只讲产品(不够)。</p></div>
+  <div class="footer-num">附录 · 技术面提纲</div>
+</section>
+
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AI 小说转剧本 · 15 分钟路演讲稿(一人主讲)</title>
+<style>
+  :root{--ink:#16202b;--muted:#5b6b7a;--accent:#0c8f9c;--accent2:#c2792b;--line:#d9e2ea;--soft:#f1f6f8;--bad:#b23a48;--good:#1d7a52;--cy:#5fd3df;}
+  *{box-sizing:border-box;}
+  html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;color:var(--ink);margin:0;line-height:1.7;font-size:12.5px;}
+  .page{padding:22mm 18mm;page-break-after:always;position:relative;}
+  .page:last-child{page-break-after:auto;}
+  .cover{background:linear-gradient(150deg,#06121a 0%,#0b2630 55%,#0c3942 100%);color:#eaf6f8;min-height:100vh;display:flex;flex-direction:column;justify-content:center;}
+  .cover .kicker{letter-spacing:4px;color:var(--cy);font-size:12px;text-transform:uppercase;}
+  .cover h1{font-size:32px;line-height:1.25;margin:14px 0 6px;font-weight:800;}
+  .cover h2{font-size:15.5px;font-weight:500;color:#9fd9e1;margin:0 0 24px;}
+  .cover .thesis{border-left:3px solid var(--cy);padding:6px 0 6px 16px;font-size:13px;color:#d6eef1;max-width:92%;}
+  .cover .meta{margin-top:28px;color:#7fb6c0;font-size:11px;}
+  h2.sec{font-size:19px;color:var(--accent);margin:0 0 4px;font-weight:800;border-bottom:2px solid var(--accent);padding-bottom:6px;}
+  .sec-sub{color:var(--muted);margin:6px 0 14px;font-size:12px;}
+  strong{color:#0c2230;}
+  ul{margin:5px 0;padding-left:18px;}li{margin:3px 0;}
+  code{background:var(--soft);padding:1px 5px;border-radius:4px;font-size:11px;}
+  .slide{border:1px solid var(--line);border-radius:9px;margin:11px 0;overflow:hidden;page-break-inside:avoid;}
+  .shead{background:#eef5f7;padding:7px 12px;font-weight:800;color:#0c2230;font-size:13px;display:flex;align-items:center;gap:8px;border-left:4px solid var(--accent);}
+  .snum{background:var(--accent);color:#fff;border-radius:5px;padding:1px 7px;font-size:11px;}
+  .stime{margin-left:auto;color:var(--muted);font-weight:600;font-size:11px;}
+  .sbody{padding:9px 13px;}
+  .say{margin:0 0 7px;}
+  .say b{color:var(--accent);}
+  .hook,.tip{font-size:11.5px;margin:4px 0;padding:5px 9px;border-radius:6px;}
+  .hook{background:#eef9f1;color:#14532d;border:1px solid #cfe9d8;}
+  .tip{background:#fdf6f0;color:#7a4410;border:1px solid #f0dcc8;}
+  .toc li{margin:5px 0;}.toc .n{color:var(--accent);font-weight:800;display:inline-block;width:26px;}
+  table{width:100%;border-collapse:collapse;margin:8px 0;font-size:11.5px;}
+  th,td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top;}
+  th{background:var(--soft);font-weight:700;}
+  .card{border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin:11px 0;background:#fbfdfe;}
+  .card .lead{font-weight:800;color:var(--accent);font-size:13px;margin-bottom:4px;}
+  .footer-num{position:absolute;bottom:10mm;right:18mm;color:var(--muted);font-size:10px;}
+</style>
+</head>
+<body>
+
+<!-- 封面 -->
+<section class="page cover">
+  <div class="kicker">七牛云实训营 · 路演 15min · 一人主讲</div>
+  <h1>AI 小说转剧本<br>15 分钟路演讲稿</h1>
+  <h2>口语化 · 结论先行 · 每页留钩子 · 为 Q&A 控场</h2>
+  <div class="thesis">
+    这场路演核心考<strong>表达能力</strong>,不是堆数据。所以讲稿:① 每页一句主张 + 一个数字 + 一个钩子;
+    ② 数字分清"实测/建模",软肋不主动说;③ 故意埋钩子,把评委的提问引向你最有准备的强项
+    (为什么选题、大纲为何故意串行、可靠性、可视化算法、落地)。<strong>记要点、别照念。</strong>
+  </div>
+  <div class="meta">对应最终版 PPT 11 页正文 + 3 页附录 · 目标讲 ~13 分钟,留 2 分钟 buffer</div>
+</section>
+
+<!-- 使用说明 -->
+<section class="page">
+  <h2 class="sec">用法 · 总策略(讲前 2 分钟扫一眼)</h2>
+  <ul>
+    <li><strong>不照稿念</strong>:每页只记"一句主张 + 一个数字 + 一个钩子",其余即兴,眼神看评委。</li>
+    <li><strong>控时</strong>:目标 ~13 分钟(format 说"快则用不满 15 分钟",讲得干脆比硬撑满更显自信)。Demo 第 4 页启动,后台跑,后面边讲边长,别盯进度条。</li>
+    <li><strong>结论先行</strong>:每段先给结果/答案,再解释为什么。</li>
+    <li><strong>讲人话</strong>:技术翻译成用户/业务语言;能打比方就打比方。</li>
+    <li><strong>钩子(🎣)</strong>:某些页结尾故意留一句,把评委 Q&A 引到你准备好的题(选题动机、故意串行、拔网线、去碰撞、落地)。</li>
+    <li><strong>诚实红线</strong>:数字主动标"实测/建模";多实例扩展、Redis(没用)、单本¥成本——<strong>别主动讲</strong>,被问再诚实划边界。</li>
+  </ul>
+  <div class="card"><div class="lead">两句保命原则</div>
+  <p style="margin:0;">① 被问住:"这是个好问题,我的理解是…更深的部分当前是这样的边界…下一步会…"——不卡壳、显成熟。② 评委打断提问:停下来认真答,答完再"我接着刚才那点"回到主线,别抢。</p></div>
+  <div class="footer-num">用法 · 总策略</div>
+</section>
+
+<!-- 讲稿正文 -->
+<section class="page">
+  <h2 class="sec">逐页讲稿(P1–P6)</h2>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P1</span> 封面 · 定位 <span class="stime">~0:20</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"大家好。我们的项目是『AI 小说转剧本引擎』——一句话,<strong>把一部小说,又快又稳地变成能开拍的剧本</strong>。接下来十几分钟,我想讲三件我们真正下了功夫的事:更快、更稳、看得懂。"</p>
+    <div class="hook">🎣 开场就抛"三件事",给评委一个记忆框架,后面所有内容往里挂。</div>
+    <div class="tip">💡 站定、放慢、看评委。第一句话最忌低头念稿。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P2</span> 业务背景 · 为什么做 <span class="stime">~1:15</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"先说为什么做这个。现在微短剧、影视改编需求在爆发,但真正卡产能的<strong>不是创意,是『把小说改成能开拍剧本』这一段</strong>——编剧手工拆书、写场景,一部书要好几天,根本接不住批量订单。我们看下来,这一段要么靠纯人工,慢又贵;要么用通用大模型,它给你一段文字,但给不了能直接拿去用的结构。<strong>中间这个又快又能用的工具,是缺位的。</strong>这就是我们选这个题的原因——一个正在爆发、但供给跟不上的真实缺口。"</p>
+    <div class="hook">🎣 这段已经把"你为什么选这个议题"答了一大半。评委再正式问,你顺势展开就行,从容。</div>
+    <div class="tip">💡 这是全场最该讲好的 75 秒,负责抓注意力。用"几天 vs 几分钟"的反差制造张力。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P3</span> 三支柱 · 定位 <span class="stime">~1:15</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"面对这个缺口,我们没去堆功能——功能谁都能做。我们把<strong>三件事的工程做扎实</strong>:第一,更快,把串行的大模型调用做成并行,端到端快了 <strong>2.47 倍</strong>;第二,更稳,批量跑上百本不翻车,整本成功率从 <strong>60% 提到 98%</strong>;第三,看得懂,做了一张 <strong>3D 故事地图</strong>把整本书结构可视化。下面每一条,我都有数据。"</p>
+    <div class="hook">🎣 "每一条都有数据"——主动邀请评委验证,显自信、也为后面铺垫。</div>
+    <div class="tip">💡 三支柱用手势数 1-2-3,帮评委记住框架。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P4</span> Demo · 系统架构(启动 demo) <span class="stime">~1:30</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"我先把 demo 跑起来。(导入《灯塔守夜人》,点开始)注意——我一点提交,它<strong>瞬间就响应了</strong>,因为后台是异步架构:任务进了队列在后台可靠地跑,我这边不用干等。它在后台生成,我们边看边讲。这张图是它的内部流水线:切章、摘要、抽取、大纲、场景,每步都是大模型调用,串起来就是『一部小说进、一份结构化剧本出』。"</p>
+    <div class="hook">🎣 留"异步架构 / 队列"的引子,技术背景的评委会顺着问"为什么用队列、崩了怎么办",你有准备。</div>
+    <div class="tip">💡 Demo 操作要练熟、别手忙脚乱。点完让它后台跑,人转回讲解,绝不盯进度条干等。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P5</span> 更快 · 瓶颈与判断 <span class="stime">~1:30</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"先说更快。一部书的剧本准备本来要好几天,我们想压到几分钟。难点是整条链路本来是一个个排队调模型,慢。我们把相互独立的几步并行起来——端到端从 <strong>222 秒压到 90 秒,2.47 倍</strong>;其中最重的场景生成,我们真跑了一本实测,<strong>98.7 秒压到 27.4 秒,3.6 倍</strong>。但有意思的是:大纲这一步我们<strong>『故意』没并行</strong>——它有先后依赖,后面要参考前面,强行并行会乱。<strong>知道哪里不能快,才是判断。</strong>"</p>
+    <div class="hook">🎣 "故意串行"是最强的钩子。评委多半会问"为什么不全并行"——这正是你最想答的判断力题,接住就赢一分。</div>
+    <div class="tip">💡 数字张口就来。讲到"故意串行""知道哪里不能快"放慢、加重——这是全场最显工程判断力的一句。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P6</span> 更稳 · 可靠性可算 <span class="stime">~1:30</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"第二,更稳。想个真实场景:客户要批量改一百本,中间只要一次模型抽风、整本就废了——这种东西没人敢用。我们做了三层兜底:单个场景失败不拖垮整本、自动重试、实在不行写个占位继续。我们还<strong>把『稳不稳』算成了一个数字</strong>:用蒙特卡洛模拟,5% 的单点失败率下,旧做法整本成功率只有 <strong>60%</strong>,我们提到了 <strong>98%</strong>,而且整本永远不崩。"</p>
+    <div class="hook">🎣 想引出"能不能现场拔网线""那 2% 怎么办"——都有诚实答案(占位继续、可重试)。</div>
+    <div class="tip">💡 "把稳不稳算成一个数字"是这页的灵魂,强调它。诚实补一句:这是蒙特卡洛<strong>建模</strong>,不是真打 20 万次模型——主动分清,显严谨。</div>
+    </div>
+  </div>
+  <div class="footer-num">讲稿 · P1–P6</div>
+</section>
+
+<section class="page">
+  <h2 class="sec">逐页讲稿(P7–P11)</h2>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P7</span> 看得懂 · 3D 故事地图 <span class="stime">~1:20</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"第三,看得懂。制片人面对一整本书,最头疼的是看不清主线和支线,不知道选哪条、砍哪些。我们做了一张可交互的 <strong>3D 故事地图</strong>(转一下)——章节、人物、事件、场景一目了然。这里有个真实的坑:短篇里几乎每个角色都关联所有场景,坐标会全挤成一团、标签糊掉。我们写了个<strong>去碰撞算法</strong>,把重叠节点从 <strong>100 对降到 0</strong>,这才真正能看。"</p>
+    <div class="hook">🎣 可视化是全场记忆点;留"去碰撞算法"引子给技术评委。</div>
+    <div class="tip">💡 现场<strong>转动地图、点一个节点</strong>,让它"活"起来——眼见为实,胜过十句解释。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P8</span> 忠于原著 · 可溯源 <span class="stime">~1:00</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"讲到这,可能有人担心:AI 会不会瞎编、魔改原著?这是影视方最怕的。我们的做法是:<strong>每个生成场景都锚定到原著真实事件、可以点回原文</strong>(点一下展示)。事件是全书抽取的,不是只看前几章编的。所以这不是 AI 放飞,是<strong>有据可溯的改编</strong>。"</p>
+    <div class="hook">🎣 这页天然引向"落地 / 给谁用 / 版权"——你的产品答案和反问都接得上。</div>
+    <div class="tip">💡 点一下溯源,展示"生成场景 → 原文第几章"的对应,这是最能打消疑虑的一下。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P9</span> 护城河 · 工程实力总账 <span class="stime">~1:00</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"把前面串一下:我们的护城河不是某个功能,是<strong>把整条链路做快、做稳、做得可复现</strong>——2.47 倍提速、98% 成功率、节点重叠归零、66 毫秒响应。而且这些数字不是 PPT 估的:我们写了可复现基准,还真跑了真实模型校准,<strong>建模预测 3.5 倍、线上实测 3.6 倍</strong>,能在我们机器上重跑。"</p>
+    <div class="hook">🎣 "可复现 / 真跑校准"正好呼应实训营评审看重的工程规范与过程,显严谨。</div>
+    <div class="tip">💡 这页是收束式总账,语速可稍快,像"收一收";数字连成一串,有气势。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P10</span> 成本控制 · 模型分级 <span class="stime">~1:10</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"再补一个很实际的:成本。批量上量后,单本成本就是能不能赚钱的关键。我们做了<strong>模型分级</strong>——简单的摘要、抽取用便宜模型,创意敏感的场景、大纲用好模型。实测下来<strong>单本成本降了约 31%,质量没掉</strong>,简单阶段还顺带变快了。<strong>便宜的地方省钱,关键的地方绝不为省钱牺牲质量。</strong>"</p>
+    <div class="hook">🎣 成本 → 商业,自然过渡到下一页;也显"商业感知力"(实训营明确看这个)。</div>
+    <div class="tip">💡 用"省钱不牺牲质量"一句收住,显成熟判断。¥金额别说死(单价是占位),只说降幅。</div>
+    </div>
+  </div>
+
+  <div class="slide">
+    <div class="shead"><span class="snum">P11</span> 商业化 · 愿景 · 收尾 <span class="stime">~1:10</span></div>
+    <div class="sbody">
+    <p class="say"><b>口播：</b>"最后说落地。它能用在哪?<strong>短剧工厂批量拆书提效、影视方快速评估 IP、网文平台给存量小说做剧本预览、给编剧当辅助工具</strong>。我们的愿景,是让『小说到剧本』这件事,从手工作坊走向工业化。回到开头那三件事——更快、更稳、看得懂。<strong>功能谁都能做,我们比的是把它做扎实、做得能用、能验证。</strong>谢谢,我很期待大家的问题。"</p>
+    <div class="hook">🎣 主动说"期待问题",把球交出去,顺势进入你准备好的 Q&A。</div>
+    <div class="tip">💡 收尾呼应开场三支柱,首尾闭环。最后一句要有力、停顿、微笑——印象分在这一下。</div>
+    </div>
+  </div>
+  <div class="footer-num">讲稿 · P7–P11</div>
+</section>
+
+<!-- Q&A 控场 -->
+<section class="page">
+  <h2 class="sec">路演后 · Q&A 控场策略</h2>
+  <p class="sec-sub">讲完不是结束,是把评委引到你最有准备的题。详细答法见《答辩拷打全集》。</p>
+
+  <h3>想被问的(讲稿已埋钩子,顺势展开)</h3>
+  <table>
+    <tr><th style="width:34%">钩子(来自哪页)</th><th>评委大概率会问 → 你的强项答案</th></tr>
+    <tr><td>选题动机(P2)</td><td>"为什么选这个题" → 真实缺口 + 市场反差(已铺垫,展开即可)</td></tr>
+    <tr><td>故意串行(P5)</td><td>"为什么不全并行" → 大纲顺序依赖,知道哪里不能快(判断力满分题)</td></tr>
+    <tr><td>可靠性(P6)</td><td>"拔网线 / 那 2%" → 隔离+重试+占位,整本不崩;诚实"占位是降级"</td></tr>
+    <tr><td>去碰撞(P7)</td><td>"算法难在哪" → 节点塌缩 + 去碰撞 100→0</td></tr>
+    <tr><td>溯源/落地(P8/P11)</td><td>"给谁用 / 能直接拍吗" → 持 IP 的内容方;人机协作、可拍初稿</td></tr>
+  </table>
+
+  <h3>使用者视角的"特殊情况"题(核心,按拷打第三章准备)</h3>
+  <p style="margin:4px 0;">评委爱带入用户问边界:<strong>关网页会不会白跑 / 不满意能不能单独重生成 / 没章节标记 / 会不会魔改 / 不同题材 / 敏感内容 / 并发点击 / 等不及</strong>。处理了就讲怎么处理,没处理就<strong>诚实划边界 + 给思路</strong>(优雅降级、不崩)。</p>
+
+  <h3>别主动说、被问再诚实划边界的(雷区)</h3>
+  <ul>
+    <li><strong>多实例 / 水平扩展</strong>(SSE 推送、操作锁、全局并发都是单机)→ "当前单机验证,扩展是下一步,方案是…"。</li>
+    <li><strong>Redis</strong>:项目<strong>没用</strong>,锁是本地 ReentrantLock。别说成用了 Redis。</li>
+    <li><strong>单本¥成本</strong>:token 数实测、但单价是占位 → 只讲"降幅 31%",不报具体金额。</li>
+  </ul>
+
+  <h3>反问环节(你问面试官 · 挑 2–3 个)</h3>
+  <ul>
+    <li>"我们这产品在七牛/真实业务里有机会落地实战吗?"(把球踢回强项)</li>
+    <li>"能给点职业生涯建议吗?我这阶段该重点补什么?"(谦逊、可成长)</li>
+    <li>"您平时怎么获取最新 AI 进展?有推荐的渠道吗?"(显热情、好聊)</li>
+    <li class="" style="color:var(--bad);">红线:别先问薪资/转正率,别问"我过了吗"。</li>
+  </ul>
+
+  <div class="card"><div class="lead">附录三页(A1 压测 / A2 踩坑地图 / A3 Q&A)怎么用</div>
+  <p style="margin:0;">正文讲不到,<strong>只在评委深问时翻出来</strong>:问"怎么证明变快/最佳并发"→ A1;问"工程量/协作过程"→ A2(11 个 fix 分支正好证明『保留开发过程痕迹』,是评审加分项);产品类追问→ A3。</p></div>
+  <div class="footer-num">Q&A 控场</div>
+</section>
+
+</body>
+</html>

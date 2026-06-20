@@ -2,6 +2,8 @@ package com.novel2script.backend.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -19,6 +21,8 @@ import java.util.function.Consumer;
 
 @Component
 public class AiChatClient {
+
+    private static final Logger log = LoggerFactory.getLogger(AiChatClient.class);
 
     private final AiProperties aiProperties;
 
@@ -38,12 +42,21 @@ public class AiChatClient {
     }
 
     public String completeJson(String systemPrompt, String userPrompt) {
+        return completeJson(systemPrompt, userPrompt, aiProperties.getModelId());
+    }
+
+    // 结构化、容错高的阶段(摘要/抽取)走廉价模型，做模型分级降本。
+    public String completeJsonCheap(String systemPrompt, String userPrompt) {
+        return completeJson(systemPrompt, userPrompt, aiProperties.getCheapModelId());
+    }
+
+    public String completeJson(String systemPrompt, String userPrompt, String modelId) {
         if (!aiProperties.isConfigured()) {
             throw new IllegalStateException("未配置 AI_API_KEY");
         }
 
         Map<String, Object> requestBody = Map.of(
-                "model", aiProperties.getModelId(),
+                "model", modelId,
                 "temperature", 0.2,
                 "response_format", Map.of("type", "json_object"),
                 "messages", List.of(
@@ -269,6 +282,16 @@ public class AiChatClient {
     private String extractContent(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode usage = root.path("usage");
+            if (!usage.isMissingNode()) {
+                // 成本基线插桩：记录每次调用的 token 用量，按线程名归到对应阶段。仅记日志，不改 prompt/逻辑。
+                log.info("AI_TOKEN_USAGE thread={} model={} prompt={} completion={} total={}",
+                        Thread.currentThread().getName(),
+                        root.path("model").asText(""),
+                        usage.path("prompt_tokens").asInt(),
+                        usage.path("completion_tokens").asInt(),
+                        usage.path("total_tokens").asInt());
+            }
             String content = root.path("choices").path(0).path("message").path("content").asText();
             if (content == null || content.isBlank()) {
                 throw new IllegalStateException("AI 响应中没有 content 字段");

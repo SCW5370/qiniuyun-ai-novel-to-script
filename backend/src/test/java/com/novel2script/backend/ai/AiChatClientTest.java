@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class AiChatClientTest {
 
     private final AiChatClient aiChatClient = new AiChatClient(
-            new AiProperties("", "https://example.com/v1", "test-model", 10, 0),
+            new AiProperties("", "https://example.com/v1", "test-model", "", 10, 0),
             new ObjectMapper()
     );
 

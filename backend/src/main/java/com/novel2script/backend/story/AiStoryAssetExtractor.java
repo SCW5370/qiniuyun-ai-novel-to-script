@@ -83,7 +83,7 @@ public class AiStoryAssetExtractor {
     }
 
     private BatchAssets extractBatch(String projectId, List<SourceChapter> batch) throws Exception {
-        String response = aiChatClient.completeJson(
+        String response = aiChatClient.completeJsonCheap(
                 "你是小说剧本化系统的故事资产分析助手。只返回合法 JSON，不要输出解释。",
                 buildPrompt(batch)
         );

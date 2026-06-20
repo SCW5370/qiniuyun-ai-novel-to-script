@@ -1,0 +1,11 @@
+stage,metric,value
+scene,serial_ms,98674
+scene,parallel4_ms,27366
+scene,speedup,3.61
+scene,per_call_mean_ms,10964
+summary,wall_ms_c4,69827
+summary,per_call_ms,34913
+asset_outline_scene_pipeline,wall_ms,219020
+submit,async_ms_1,40
+submit,async_ms_2,66
+scene,failed_count,0

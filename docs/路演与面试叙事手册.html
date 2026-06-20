@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AI 小说转剧本 · 路演与面试叙事手册</title>
+<style>
+  :root {
+    --ink: #16202b;
+    --muted: #5b6b7a;
+    --accent: #0c8f9c;
+    --accent-2: #c2792b;
+    --line: #d9e2ea;
+    --soft: #f1f6f8;
+    --bad: #b23a48;
+    --good: #1d7a52;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    color: var(--ink);
+    margin: 0;
+    line-height: 1.7;
+    font-size: 13px;
+  }
+  .page { padding: 26mm 20mm; page-break-after: always; position: relative; }
+  .page:last-child { page-break-after: auto; }
+
+  /* 封面 */
+  .cover {
+    background: linear-gradient(150deg, #06121a 0%, #0b2630 55%, #0c3942 100%);
+    color: #eaf6f8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .cover .kicker { letter-spacing: 4px; color: #5fd3df; font-size: 12px; text-transform: uppercase; }
+  .cover h1 { font-size: 38px; line-height: 1.25; margin: 14px 0 6px; font-weight: 800; }
+  .cover h2 { font-size: 18px; font-weight: 500; color: #9fd9e1; margin: 0 0 28px; }
+  .cover .thesis {
+    border-left: 3px solid #5fd3df; padding: 6px 0 6px 16px; font-size: 15px;
+    color: #d6eef1; max-width: 84%;
+  }
+  .cover .meta { margin-top: 40px; color: #7fb6c0; font-size: 12px; }
+
+  h2.sec { font-size: 21px; color: var(--accent); margin: 0 0 4px; font-weight: 800; }
+  .sec-sub { color: var(--muted); margin: 0 0 18px; font-size: 12.5px; }
+  h3 { font-size: 15px; margin: 22px 0 8px; color: var(--ink); border-left: 3px solid var(--accent); padding-left: 9px; }
+  h4 { font-size: 13.5px; margin: 14px 0 6px; color: var(--accent-2); }
+  p { margin: 7px 0; }
+  ul, ol { margin: 7px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  strong { color: #0c2230; }
+  .accent { color: var(--accent); font-weight: 700; }
+
+  .tag { display: inline-block; font-size: 10.5px; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--accent); border: 1px solid var(--line); margin-right: 6px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 4px; font-size: 12px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: var(--soft); color: #0c2230; font-weight: 700; }
+  td.bad { color: var(--bad); }
+  td.good { color: var(--good); }
+
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 12px 0; background: #fbfdfe; }
+  .card .lead { font-weight: 800; color: var(--accent); font-size: 14px; }
+  .quote { background: #06303a; color: #eaf6f8; border-radius: 8px; padding: 9px 13px; margin: 8px 0; font-size: 12.5px; }
+  .quote::before { content: "金句  "; color: #5fd3df; font-weight: 800; letter-spacing: 1px; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+
+  .timeline th:nth-child(1) { width: 64px; }
+  .timeline th:nth-child(2) { width: 30%; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .note { font-size: 11.5px; color: var(--muted); }
+  .danger { color: var(--bad); font-weight: 700; }
+  .ok { color: var(--good); font-weight: 700; }
+  .footer-num { position: absolute; bottom: 12mm; right: 20mm; color: var(--muted); font-size: 10.5px; }
+  .toc li { margin: 6px 0; }
+  .toc .n { color: var(--accent); font-weight: 800; display: inline-block; width: 26px; }
+</style>
+</head>
+<body>
+
+<!-- 封面 -->
+<section class="page cover">
+  <div class="kicker">路演 15min · 面试 45min · 叙事作战手册</div>
+  <h1>AI 小说转剧本<br>差异化叙事手册</h1>
+  <h2>不比"做了什么功能",比"解决了什么问题"</h2>
+  <div class="thesis">
+    功能是入场券,人人都有;真正拉开差距的是 —— 你能否把一个普通课题,
+    讲成一段"发现瓶颈 → 在约束下取舍 → 拿出可量化结果"的工程叙事。
+    本手册把我们已经做出的三类硬优化,翻译成评委一听就记住的故事。
+  </div>
+  <div class="meta">内部备战文档 · 供全员对齐话术与分工</div>
+</section>
+
+<!-- 目录 -->
+<section class="page">
+  <h2 class="sec">目录</h2>
+  <p class="sec-sub">建议:路演组重点读 四 / 六 / 七,主讲与答辩组通读全篇。</p>
+  <ul class="toc" style="list-style:none; padding-left:0; font-size:13.5px;">
+    <li><span class="n">一</span> 核心叙事主张 —— 我们到底跟别人比什么</li>
+    <li><span class="n">二</span> 话术对照表 —— 把"功能"翻译成"解决问题"</li>
+    <li><span class="n">三</span> 五个招牌故事(STAR 结构,面试主线)</li>
+    <li><span class="n">四</span> 15 分钟路演逐分钟脚本</li>
+    <li><span class="n">五</span> 45 分钟面试作战地图与高频追问</li>
+    <li><span class="n">六</span> 亮点速记卡(临场前 5 分钟扫一眼)</li>
+    <li><span class="n">七</span> Demo 防翻车清单</li>
+    <li><span class="n">八</span> 叙事红线 Dos &amp; Don'ts</li>
+    <li><span class="n">九</span> 叙事优先级排序(评委视角)—— 时间不够时先说什么 ★</li>
+  </ul>
+  <div class="card">
+    <div class="lead">一句话总纲</div>
+    <p style="margin-bottom:0;">"我们没有只做一个能跑的 demo,我们做的是一个<strong>在真实约束下被打磨过的系统</strong> ——
+    它更快、演示时不会翻车、并且把抽象的故事结构变成了你能用手转动的 3D 故事线。"</p>
+  </div>
+  <div class="footer-num">AI 小说转剧本 · 叙事手册</div>
+</section>
+
+<!-- 一、核心叙事主张 -->
+<section class="page">
+  <h2 class="sec">一、核心叙事主张</h2>
+  <p class="sec-sub">先定框:评委 15 分钟里能记住的东西极少,我们要替他们决定"记住哪三点"。</p>
+
+  <h3>评委的心智模型</h3>
+  <p>大多数组的叙事是"输入小说 → 调用大模型 → 输出剧本,我们做完了"。这在评委听来是<strong>同质化的</strong> ——
+  功能谁都能拼出来。能拿分的,是让评委感到"这组真的<strong>踩过坑、做过判断、有工程深度</strong>"。</p>
+
+  <h3>我们的差异化三支柱</h3>
+  <table>
+    <tr><th style="width:30%">支柱</th><th>一句话主张</th><th style="width:24%">证据(可现场指)</th></tr>
+    <tr>
+      <td><span class="tag">性能</span>瓶颈狙击式提速</td>
+      <td>整条链路是"阻塞式 LLM 调用链",我们定位到真瓶颈并做了<strong>有界并行</strong>,而不是无脑加机器。</td>
+      <td>线上实测场景阶段 <strong>3.61×</strong>;端到端建模 2.47×(222s→90s)</td>
+    </tr>
+    <tr>
+      <td><span class="tag">稳定</span>演示级可靠性</td>
+      <td>单点失败不拖垮全局、断连不丢结果、模型抽风有规则兜底 —— 为"现场不翻车"专门做工程。</td>
+      <td>蒙特卡洛实测:整本成功率 <strong>60%→98%</strong>(5% 失败率);不崩率 100%</td>
+    </tr>
+    <tr>
+      <td><span class="tag">独特</span>3D 故事生产地图</td>
+      <td>别人给一张表,我们给一张<strong>能转动、随生成生长</strong>的故事线星图,还解决了节点重叠的布局难题。</td>
+      <td>3D 地图实时演示 + 去碰撞布局算法</td>
+    </tr>
+  </table>
+  <p class="note" style="margin-top:10px;">三支柱站在同一个<strong>异步任务架构底座</strong>上 —— 提交即返回、消息队列保证可靠执行、SSE 实时回推进度。它让"快"被用户感知到、让"稳"在崩溃后仍能恢复。这是<strong>招牌故事 5</strong>,15 分钟里点到为止、45 分钟里展开讲。</p>
+
+  <h3>贯穿全程的叙事公式</h3>
+  <div class="card">
+    <p style="margin:0 0 6px;"><strong>问题 → 约束 → 取舍 → 决策 → 可量化结果</strong></p>
+    <p class="note" style="margin:0;">永远不要停在"我实现了 X 功能"。每个亮点都要补足:它解决了什么痛?在什么约束下(演示稳定/不改模型输出/时间紧)?我们放弃了什么、选择了什么?结果好在哪、怎么量化?</p>
+  </div>
+  <div class="quote">"评委记不住功能列表,但会记住一个'他们发现瓶颈、做了取舍、拿出数字'的故事。我们今天要讲的就是这三个故事。"</div>
+  <div class="footer-num">一 · 核心叙事主张</div>
+</section>
+
+<!-- 二、话术对照表 -->
+<section class="page">
+  <h2 class="sec">二、话术对照表</h2>
+  <p class="sec-sub">同一件事,左边是"完成功能"的平庸说法,右边是"解决问题"的升级说法。背下右列。</p>
+  <table>
+    <tr><th style="width:38%">❌ 平庸说法(功能视角)</th><th>✅ 升级说法(问题/工程视角)</th></tr>
+    <tr>
+      <td class="bad">"我们用线程池让生成变快了。"</td>
+      <td class="good">"我们先定位到瓶颈:整条链路是<strong>串行的阻塞式大模型调用</strong>,总耗时≈调用次数×单次时延。于是把三个相互独立的阶段做了<strong>有界并行</strong>,并刻意保留了大纲阶段的串行 —— 因为它有上下文依赖,强行并行会损害质量。"</td>
+    </tr>
+    <tr>
+      <td class="bad">"我们做了流式输出。"</td>
+      <td class="good">"我们区分了<strong>感知延迟</strong>和<strong>真实墙钟</strong>:流式治的是前者,并行治的是后者,两者我们都做了。而且流式不是假的打字机回放 —— 是真实边生成、边落库。"</td>
+    </tr>
+    <tr>
+      <td class="bad">"我们做了异常处理。"</td>
+      <td class="good">"我们为'现场演示'专门做了容错:单个场景生成失败会写<strong>失败占位</strong>而不是中断整本书;客户端断连后端仍会<strong>跑完并保存</strong>;模型抽风时有<strong>规则兜底</strong>。目标是路演时不会因为一个偶发错误全盘崩掉。"</td>
+    </tr>
+    <tr>
+      <td class="bad">"我们做了一个可视化页面。"</td>
+      <td class="good">"我们把抽象的故事结构做成可交互 3D 故事线,并解决了一个真实的<strong>布局难题</strong>:短篇里几乎每个角色都关联到所有场景,坐标会塌缩到一个点、标签糊成一团。我们用<strong>去碰撞分道 + 焦点上下文标签</strong>解决了。"</td>
+    </tr>
+    <tr>
+      <td class="bad">"后面的场景也有来源事件。"</td>
+      <td class="good">"来源事件是<strong>全书抽取</strong>的、不是只取前几章 —— 后面的场景不是编的,是被真实事件锚定的。我们还做了事件归一化重编号保证溯源一致。"</td>
+    </tr>
+    <tr>
+      <td class="bad">"我们用了消息队列 MQ。"</td>
+      <td class="good">"分析整本书是<strong>分钟级长任务</strong>,远超请求超时。我们把'提交'和'执行'<strong>解耦</strong>:点一下立刻投递 MQ 返回 jobId、毫秒级响应,不占 Web 线程;<strong>持久化队列</strong>保证进程崩了也能由消息重建任务继续跑;同一项目进行中的任务<strong>幂等去重</strong>,重复点击不会重复打爆模型。不是为了用 MQ 而用 —— 是长任务架构的必然。"</td>
+    </tr>
+  </table>
+  <p class="note">用法:任何评委问"你们做了什么",先用一句价值主张,再立刻切到右列的"问题—取舍—结果"结构。</p>
+  <div class="footer-num">二 · 话术对照表</div>
+</section>
+
+<!-- 三、四个招牌故事 -->
+<section class="page">
+  <h2 class="sec">三、五个招牌故事</h2>
+  <p class="sec-sub">面试主线。每个故事 = 背景 / 冲突 / 动作 / 结果 + 金句 + 预备追问。讲到能脱稿。</p>
+
+  <div class="card">
+    <div class="lead">故事 1 · 瓶颈狙击:串行 LLM 流水线 → 有界并行</div>
+    <p><strong>背景:</strong>整本书的处理是一条流水线 —— 切章 → 章节摘要 → 实体/事件抽取 → 场景大纲 → 逐场景剧本,每一步都是大模型调用。</p>
+    <p><strong>冲突:</strong>一开始全是串行,整本书要等"调用次数 × 单次时延",几分钟起步,路演根本等不起。</p>
+    <p><strong>动作:</strong>我们做了瓶颈建模:<em>墙钟 ≈ 单次时延 × 关键路径上的串行波次</em>。据此把<strong>三个相互独立</strong>的阶段并行化 —— 章节摘要、实体/事件抽取、逐场景剧本,各用<strong>有界线程池</strong>(并发 4 + 队列上限 + 拒绝回退到调用方),把对模型的并发压在可控范围。<strong>关键判断:大纲阶段我们故意不并行</strong> —— 每个事件批次都要拿前面已生成的场景做上下文、按顺序编号,强行并行会破坏叙事连贯。</p>
+    <p style="margin-bottom:0;"><strong>结果:</strong>把可并行阶段的耗时从"逐个相加"压到接近"单批耗时 × 批次数";并且我们<strong>知道</strong>剩下不可压缩的硬瓶颈在哪、为什么。</p>
+    <div class="quote">"我们不是无脑加并发,而是分清了'哪里能并行、哪里因为上下文依赖必须串行' —— 后者才是真正考验判断的地方。"</div>
+    <p class="note"><strong>预备追问</strong> · "为什么不全部并行?" → 大纲的顺序上下文依赖。"并发设多少?" → 受模型限流约束,有界 4 起步,可配置环境变量。"怎么证明变快?" → 后端每阶段都打 elapsedMs 日志,有前后对比。</p>
+  </div>
+
+  <div class="card">
+    <div class="lead">故事 2 · 演示级可靠性:为"不翻车"做工程</div>
+    <p><strong>背景:</strong>大模型是不稳定外部依赖 —— 偶发超时、格式异常、限流。路演现场一旦某一步崩,整本书就废了。</p>
+    <p><strong>冲突:</strong>原本一个场景失败会抛异常、中断整条流水线;现场演示这是致命的。</p>
+    <p><strong>动作:</strong>三层防护 —— ① <strong>单点失败隔离</strong>:某场景失败写入"失败占位"并继续生成其余场景,失败的还会在下次被重试;② <strong>规则兜底</strong>:模型抽风时退回规则生成,降级而非崩溃;③ <strong>断连自愈</strong>:客户端断开后端仍跑完并落库,前端再靠轮询补回漏掉的状态。</p>
+    <p style="margin-bottom:0;"><strong>结果:</strong>演示可靠性从"任一步失败即全崩"变成"局部失败可见、可重试、不影响全局"。</p>
+    <div class="quote">"我们把'演示不翻车'当成一个真实的工程目标来设计,而不是祈祷现场网络好。可以现场拔一下网线给你看。"</div>
+    <p class="note"><strong>现场杀手锏</strong>:如果允许,演示时主动制造一次失败(或断连),展示系统自我恢复 —— 这比任何 PPT 都有说服力。</p>
+  </div>
+  <div class="footer-num">三 · 招牌故事(1/3)</div>
+</section>
+
+<section class="page">
+  <div class="card">
+    <div class="lead">故事 3 · 真·流式 + 落库:同时治"感知"与"真实"延迟</div>
+    <p><strong>背景:</strong>用户最直观的痛是"点了之后干等,内容啪一下全出来"。</p>
+    <p><strong>冲突:</strong>很多做法是前端假打字机回放 —— 看着像流式,其实内容早生成完了,治标不治本,而且切换场景会重复"伪流式"。</p>
+    <p><strong>动作:</strong>我们做<strong>真实流式</strong>:后端边调用模型边把 chunk 通过 SSE 推给前端,流完<strong>解析并落库</strong>,把已保存的正式 Scene 回传更新视图。同时强调:<strong>流式只解决感知延迟</strong>,真实墙钟靠故事 1 的并行解决 —— 我们两条线都治。</p>
+    <p style="margin-bottom:0;"><strong>结果:</strong>用户在等待中看到内容真实生长;且"看到的"和"存下来的"是同一份,没有表里不一。</p>
+    <div class="quote">"流式和并行治的是两种不同的延迟 —— 一个是'感觉快',一个是'真的快'。我们没有用前者掩盖后者。"</div>
+    <p class="note"><strong>预备追问</strong> · "流式和最终结果一致吗?" → 一致,流完即解析落库回传。"断流了怎么办?" → 后端照常完成保存,前端轮询补偿。</p>
+  </div>
+
+  <div class="card">
+    <div class="lead">故事 4 · 3D 故事生产地图:独特表达 + 真实布局算法</div>
+    <p><strong>背景:</strong>大多数组用表格/列表展示结果。我们想让评委<strong>一眼看懂故事结构</strong>,做了可交互 3D 故事线(章节 / 事件 / 角色地点 / Scene 主线四类节点 + 连线)。</p>
+    <p><strong>冲突:</strong>朴素布局会塌缩 —— 短篇里几乎每个角色/地点都关联到所有场景,按"关联场景平均位置"定坐标会让它们<strong>全挤到一个点</strong>,标签糊成一团(我们现场遇到过)。</p>
+    <p><strong>动作:</strong>① <strong>去碰撞分道布局</strong>:按锚点从左到右扫描,强制相邻节点最小间距、整体回中、奇偶错位,角色与地点各占独立横带;② <strong>焦点+上下文标签</strong>:默认只显主线序号+光点,悬停或选中场景时相关标签才浮出 —— 专业图可视化的降噪手法;③ <strong>随生成生长</strong>:场景按顺序点亮、配合骨架占位;④ 画布 memo 化,流式刷新时不重渲染整棵 Three.js 树,避免现场卡顿。</p>
+    <p style="margin-bottom:0;"><strong>结果:</strong>从"信息重叠看不清"变成"结构清晰、可交互、随生成生长"的差异化看点。</p>
+    <div class="quote">"可视化不是贴张图就行 —— 真正难的是布局。我们解决了一个具体的节点塌缩与标签重叠问题,这才是工程。"</div>
+  </div>
+  <div class="footer-num">三 · 招牌故事(2/3)</div>
+</section>
+
+<section class="page">
+  <div class="card">
+    <div class="lead">故事 5 · 异步任务架构:把"提交"和"执行"解耦 —— MQ + SSE 闭环</div>
+    <p><strong>背景:</strong>分析整本书(切章 → 摘要 → 抽取 → 大纲 → 剧本)是<strong>分钟级长任务</strong>,远超浏览器/网关的请求超时。如果同步处理,一个 Web 线程会被一个任务占住几分钟,超时一断任务就白跑。</p>
+    <p><strong>冲突:</strong>我们要同时满足三个互相矛盾的诉求 —— 点一下要<strong>立刻有反馈</strong>、任务要<strong>可靠跑完(进程崩了不丢)</strong>、用户还要<strong>实时看到进度</strong>。同步阻塞式调用一个都满足不了。</p>
+    <p><strong>动作:</strong>把"提交"和"执行"<strong>解耦</strong>成消息队列驱动的异步任务系统:<br>
+    ① <strong>提交即返回</strong>:点一下就把任务投递到 MQ、立刻回 jobId(QUEUED),HTTP 毫秒级返回,不占 Web 线程;<br>
+    ② <strong>持久化队列 = 崩溃可恢复</strong>:队列与交换机都是 durable;消费端发现内存任务态丢失(进程重启)时,直接用消息体<strong>重建任务状态继续执行</strong>;<br>
+    ③ <strong>幂等去重</strong>:同一项目已有进行中的任务,直接复用其 jobId —— 重复点击 / 并发提交不会重复投递、不会重复打爆模型;还有"剧本已全部生成则直接短路返回"避免空跑;<br>
+    ④ <strong>MQ + SSE 闭环</strong>:MQ 管"任务可靠地跑",SSE 管"用户实时看到跑到哪" —— 消费端每过一个阶段(每章资产就绪 / 每批大纲就绪 / 每个场景完成)就推一个进度事件,前端<strong>不轮询</strong>,星图随之实时生长;SSE 配 15 秒心跳 + 自动重连兜底;<br>
+    ⑤ <strong>安全边界</strong>:SSE 只推阶段、数量、状态,<strong>绝不推正文、Prompt、AI 原始响应或密钥</strong>。</p>
+    <p style="margin-bottom:0;"><strong>结果:</strong>一次点击同时拿到"即时反馈 + 可靠执行 + 实时进度";这套架构天然<strong>可水平扩展</strong>(多加消费者实例即可),而 Web 层不变。它也是流式与断连自愈能成立的底座。</p>
+    <div class="quote">"我们把'提交'和'执行'解耦了 —— MQ 保证任务可靠跑完、崩了能恢复,SSE 保证你实时看到它跑到哪。这不是为了用 MQ 而用 MQ,是分钟级长任务绕不开的架构。"</div>
+    <p class="note"><strong>预备追问</strong> · "为什么用 MQ,不直接开个线程跑?" → 线程态随进程消失、不可恢复、不能削峰扩展;持久化队列三者都解决。"进程崩了任务丢吗?" → 不丢,消息持久化,消费端用消息体重建状态续跑。"重复点击会重复执行吗?" → 不会,进行中任务幂等复用 jobId。"MQ 和 SSE 各管什么?" → MQ 管可靠执行,SSE 管实时回推,两者配成闭环。"还有别的工程化吗?" → 增量分析(只处理新增内容)、任务投递失败立即标 FAILED 不留假 QUEUED。</p>
+  </div>
+  <div class="footer-num">三 · 招牌故事(3/3)</div>
+</section>
+
+<!-- 四、15分钟路演脚本 -->
+<section class="page">
+  <h2 class="sec">四、15 分钟路演逐分钟脚本</h2>
+  <p class="sec-sub">原则:前 90 秒必须抛出"痛点 + 我们的不同";Demo 用<strong>短篇</strong>跑(快、稳、故事线饱满)。</p>
+  <table class="timeline">
+    <tr><th>时间</th><th>你说什么(要点)</th><th>你演 / 强调</th></tr>
+    <tr><td>0–1′</td><td>钩子:"小说转剧本不难,难的是<strong>又快、又不翻车、还能让人看懂故事结构</strong>。这三点是我们和别人的区别。"</td><td>一句话定位,不进功能细节</td></tr>
+    <tr><td>1–3′</td><td>现场导入<strong>短篇</strong>,点开始 —— 顺势点一句"提交瞬间就返回了,因为是<strong>异步任务架构(MQ+SSE)</strong>,后台可靠地跑、前台实时回推进度"。</td><td>启动 demo;镜头给到进度与 3D 地图</td></tr>
+    <tr><td>3–6′</td><td>讲<strong>故事 1(并行提速)</strong>:瓶颈建模 + 三阶段并行 + 大纲为何故意串行。亮 elapsedMs 前后数字。</td><td>切后端日志/对比图,给出真实数字</td></tr>
+    <tr><td>6–9′</td><td>讲<strong>故事 4(3D 地图)</strong>:点选场景看上下文高亮、悬停看节点、讲去碰撞布局解决了什么。</td><td>转动地图、点选、悬停现场交互</td></tr>
+    <tr><td>9–11′</td><td>讲<strong>故事 3(真流式)</strong>:重生成一个场景,看内容真实流式落库。点明"感知 vs 真实延迟我们都治"。</td><td>触发一次流式生成</td></tr>
+    <tr><td>11–13′</td><td>讲<strong>故事 2(可靠性)</strong>:制造一次失败/断连,展示失败占位+自愈。"为不翻车做工程"。</td><td>(可选)现场制造失败演示恢复</td></tr>
+    <tr><td>13–14′</td><td>收束:回到三支柱一句话各一句,呼应开场。</td><td>三支柱 slide 定格</td></tr>
+    <tr><td>14–15′</td><td>留 buffer / 主动抛一个我们最想被问的技术点引导提问。</td><td>引导评委问到你的强项</td></tr>
+  </table>
+  <p class="note"><strong>分工建议</strong>:1 名主讲控节奏与叙事,1 名操作 demo(不抢话),1 名盯后台/随时准备回答深问。Demo 与讲解<strong>并行</strong>,别让大家盯着进度条干等。</p>
+  <div class="footer-num">四 · 路演脚本</div>
+</section>
+
+<!-- 五、45分钟面试作战地图 -->
+<section class="page">
+  <h2 class="sec">五、45 分钟面试作战地图</h2>
+  <p class="sec-sub">目标:把对话主动引向四个招牌故事,而不是被动答功能题。</p>
+
+  <h3>开场设框(前 3 分钟自己主导)</h3>
+  <p>主动说:"我们想重点讲三件我们觉得有工程含量的事 —— 提速的瓶颈分析、演示级的容错、以及 3D 故事线的布局难题。" —— <strong>替评委设定话题地图</strong>,后面所有问题都更容易落回你的强项。</p>
+
+  <h3>高频追问与强答案</h3>
+  <table>
+    <tr><th style="width:34%">问题</th><th>强答案骨架</th></tr>
+    <tr><td>"这功能别人也能做,你们差异在哪?"</td><td>"功能是入场券。差异在于我们做了瓶颈分析后的<strong>有界并行</strong>、为现场可靠性做的<strong>失败隔离/兜底/自愈</strong>、以及解决了 3D 布局塌缩的<strong>去碰撞算法</strong> —— 这三点是判断力和工程,不是堆功能。"</td></tr>
+    <tr><td>"为什么不直接全部并行,越快越好?"</td><td>"大纲阶段有<strong>顺序上下文依赖</strong>,每批要拿前文场景当上下文,强行并行会破坏连贯;而且模型有限流,无界并发会被拒。所以是<strong>有界</strong>并行 + 保留必要串行。"</td></tr>
+    <tr><td>"怎么证明你们真的变快了?"</td><td>"两条证据:① 后端每阶段打 <strong>elapsedMs</strong> 日志,可现场看;② 我们写了<strong>可复现基准</strong>(与生产同语义的线程池),实测可并行阶段各 3.3–3.8×、<strong>端到端 222s→90s≈2.47×</strong>,并扫描出最佳并发度。数字能在本机重跑。"</td></tr>
+    <tr><td>"模型出错/超时怎么办?"</td><td>"三层:单点失败写占位不中断全局、规则兜底降级、断连后端跑完落库前端轮询补偿。"</td></tr>
+    <tr><td>"流式是不是前端假装的?"</td><td>"不是。后端真实边生成边推 SSE,流完解析落库,看到的与存下的一致。我们之前删掉了假打字机方案。"</td></tr>
+    <tr><td>"3D 地图技术难点?"</td><td>"布局塌缩与标签重叠。去碰撞分道 + 焦点上下文标签 + 画布 memo 防止流式期间重渲染。"</td></tr>
+    <tr><td>"为什么要引入 MQ?直接处理不行吗?"</td><td>"分析整本书是<strong>分钟级长任务</strong>,同步会占满 Web 线程、超时即白跑。MQ 让我们'提交即返回 jobId',<strong>持久化队列</strong>保证崩溃可恢复,<strong>幂等去重</strong>防重复提交,还天然可水平扩展。"</td></tr>
+    <tr><td>"进程崩了/重启了任务会丢吗?"</td><td>"不会。队列与交换机持久化,消费端发现内存态丢失时用消息体<strong>重建任务状态续跑</strong>;投递失败会立即标 FAILED,不会留下假 QUEUED。"</td></tr>
+    <tr><td>"MQ 和 SSE 各解决什么,为什么都要?"</td><td>"<strong>MQ 管可靠执行,SSE 管实时回推</strong>,两者配成闭环:提交后不轮询,消费端每过一阶段推一个进度事件,星图实时生长;SSE 只推状态、不推正文/Prompt/密钥。"</td></tr>
+    <tr><td>"质量怎么保证不是瞎编?"</td><td>"事件全书抽取并归一化重编号,场景按 sourceRefs 溯源;还有校验报告和 YAML 导出显式标出失败/警告。"</td></tr>
+    <tr><td>"你个人具体做了什么?"</td><td>(每人准备一句)"我负责 X,遇到 Y 问题,做了 Z 取舍,结果 W。"</td></tr>
+  </table>
+
+  <h3>把"被动答题"变"主动叙事"的小技巧</h3>
+  <ul>
+    <li>每个回答结尾<strong>反挂一个钩子</strong>:"这块如果展开,还有一个我们做的取舍……" 引导下一个问题往你强项走。</li>
+    <li>遇到不熟的问题,诚实承认边界,再<strong>桥接</strong>回招牌故事:"这点我们没深做,但相邻的 X 我们处理过……"</li>
+    <li>数字要张口就来(并发度、阶段数、节点类别数、elapsedMs 量级)。</li>
+  </ul>
+  <div class="footer-num">五 · 面试作战地图</div>
+</section>
+
+<!-- 六、亮点速记卡 -->
+<section class="page">
+  <h2 class="sec">六、亮点速记卡</h2>
+  <p class="sec-sub">临场前 5 分钟扫这一页。每人手机里存一份。</p>
+
+  <h4>三支柱(必须张口就来)</h4>
+  <div class="pill-row">
+    <span class="tag">瓶颈狙击式有界并行</span>
+    <span class="tag">演示级容错(隔离/兜底/自愈)</span>
+    <span class="tag">3D 故事线 + 去碰撞布局</span>
+  </div>
+
+  <h4>关键数字 / 事实(把测得的数字填进【】)</h4>
+  <ul>
+    <li>流水线阶段:切章 → 摘要 → 实体/事件抽取 → 大纲 → 逐场景剧本(<strong>5 段,全是 LLM 调用</strong>)。</li>
+    <li>已并行阶段:<strong>章节摘要 / 实体事件抽取 / 逐场景剧本</strong>,有界并发默认 4、可配置。</li>
+    <li>故意保留串行:<strong>大纲</strong>(顺序上下文依赖,不可并行)。</li>
+    <li>提速量级(建模 + 线上真跑双验证):场景阶段<strong>线上实测 3.61×</strong>(98.7s→27.4s,9 个真实模型时延);端到端建模 <strong>2.47×</strong>;串行大纲占 33%(剩余硬瓶颈)。详见《优化量化报告》第七章。</li>
+    <li>线上实测铁证:异步提交响应 <strong>40–66ms</strong>(MQ);场景 <strong>9/9 PASSED、失败 0</strong>;并发 4 路(scene-script-1..4);布局重叠对 <strong>100→0</strong>。</li>
+    <li>地图节点类别:<strong>4 类</strong>(章节 / 事件 / 角色·地点 / Scene 主线)。</li>
+    <li>容错三层:失败占位 + 规则兜底 + 断连自愈。</li>
+    <li>异步架构:<strong>MQ 解耦提交/执行</strong> + 持久化队列(崩溃可恢复) + 幂等去重 + <strong>SSE 实时回推</strong>(不轮询,15s 心跳自动重连)。</li>
+    <li>安全边界:SSE 只推阶段/数量/状态,<strong>不推正文/Prompt/AI 原始响应/密钥</strong>。</li>
+    <li>可靠性(蒙特卡洛实测):整本成功率 <strong>60%→98%</strong>(5% 单点失败率),不崩率 100%。</li>
+    <li>感知延迟(真流式):首屏 <strong>12s→0.7s ≈ 17×</strong>;墙钟靠并行、感知靠流式,两条线分治。</li>
+    <li>可扩展性:DB 连接占用 <strong>12s→0.2s ≈ 60×</strong>(慢调用移出事务),并发16/池10 排队 6→0。</li>
+    <li>成本控制(已落地实测):模型分级(摘要/抽取下放 flash、场景/大纲保 pro)→ 单本成本 <strong>降 ~31%、质量零退化</strong>,摘要阶段顺带 <strong>49s→7s</strong>;单本 ~40K token。</li>
+    <li>踩坑深度:<strong>11 个 fix 分支 = 11 个真实问题</strong>(长事务/连接泄漏/SSE 断连/脏 JSON…),166 commit、+12.7k 行。</li>
+  </ul>
+
+  <h4>金句(挑 2 句反复用)</h4>
+  <div class="quote">"功能是入场券,我们比的是发现瓶颈、做取舍、拿数字的工程能力。"</div>
+  <div class="quote">"我们分清了能并行的和因上下文必须串行的 —— 后者才考验判断。"</div>
+  <div class="quote">"流式治感知延迟,并行治真实延迟,我们两个都治。"</div>
+  <div class="quote">"我们把'演示不翻车'当工程目标设计,而不是祈祷网络好。"</div>
+  <div class="quote">"我们把提交和执行解耦:MQ 保证任务可靠跑完、崩了能恢复,SSE 保证你实时看到它跑到哪。"</div>
+
+  <h4>千万别说(见第八章红线)</h4>
+  <p class="danger">别说"就是调了个大模型 API"、别念功能清单、别在没数字时说"快很多"。</p>
+  <div class="footer-num">六 · 速记卡</div>
+</section>
+
+<!-- 七、防翻车清单 -->
+<section class="page">
+  <h2 class="sec">七、Demo 防翻车清单</h2>
+  <p class="sec-sub">路演前 30 分钟逐条打勾。现场稳定 &gt; 内容炫酷。</p>
+  <table>
+    <tr><th style="width:30%">项目</th><th>动作</th><th style="width:14%">状态</th></tr>
+    <tr><td>演示文本</td><td>用<strong>短篇</strong>(人物少、事件清晰、单一主线),阶段批次少→生成快、故事线又饱满。</td><td>☐</td></tr>
+    <tr><td>模型预热</td><td>开场前先跑一次丢弃请求,避免首调用冷启动慢一截。</td><td>☐</td></tr>
+    <tr><td>数据初始态</td><td>清到干净初始状态,避免脏数据导致展示异常。</td><td>☐</td></tr>
+    <tr><td>降级路径</td><td>确认模型失败时规则兜底可用;准备一份"已生成好的项目"作为<strong>离线后备</strong>。</td><td>☐</td></tr>
+    <tr><td>网络</td><td>确认 AI 接口可达;有备用网络;断连自愈现场可演示。</td><td>☐</td></tr>
+    <tr><td>并发参数</td><td>确认并发度设置合理,避免触发模型限流被拒。</td><td>☐</td></tr>
+    <tr><td>日志可见</td><td>准备好能展示 elapsedMs 的窗口/截图作为"提速证据"。</td><td>☐</td></tr>
+    <tr><td>地图交互</td><td>预先点选/悬停过一遍,确认标签浮出、上下文高亮正常。</td><td>☐</td></tr>
+    <tr><td>分工彩排</td><td>主讲/操作/答辩各就位,至少完整走一遍 15 分钟。</td><td>☐</td></tr>
+  </table>
+  <div class="card">
+    <div class="lead">兜底原则</div>
+    <p style="margin-bottom:0;">现场任何一步卡住:<strong>不要僵等</strong>。立刻切到"我们正好讲讲这背后的设计"——把等待时间填成叙事;同时操作手切到离线后备项目继续演示。</p>
+  </div>
+  <div class="footer-num">七 · 防翻车清单</div>
+</section>
+
+<!-- 八、叙事红线 -->
+<section class="page">
+  <h2 class="sec">八、叙事红线 Dos &amp; Don'ts</h2>
+  <p class="sec-sub">最后对齐:这些是会扣分/加分的细节。</p>
+  <div class="grid2">
+    <div>
+      <h4 class="ok">✅ Do</h4>
+      <ul>
+        <li>每个亮点都讲成"问题→约束→取舍→结果"。</li>
+        <li>主动设框,替评委决定记住哪三点。</li>
+        <li>用真实数字(elapsedMs、并发度、阶段数)。</li>
+        <li>承认边界,再桥接回强项。</li>
+        <li>强调判断力:哪里并行、哪里<strong>故意不</strong>并行。</li>
+        <li>Demo 与讲解并行,不让评委盯进度条。</li>
+        <li>现场展示容错(制造一次失败再恢复)。</li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="danger">❌ Don't</h4>
+      <ul>
+        <li>念功能清单("我们还做了…还做了…")。</li>
+        <li>说"就是调了个大模型"自我矮化。</li>
+        <li>没有数字时说"快了很多/好了很多"。</li>
+        <li>把感知优化(流式)说成真实提速。</li>
+        <li>夸大成"全自动无错",被一个失败当场打脸。</li>
+        <li>四个人抢着答、互相打断。</li>
+        <li>在评委没问时陷入实现细节自嗨。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>收尾:一段可以背下来的 60 秒电梯陈述</h3>
+  <div class="card">
+    <p style="margin:0;">"小说转剧本的功能不稀奇,稀奇的是把它做<strong>快、做稳、做得能看懂</strong>。我们做了三件有工程含量的事:
+    一,把串行的大模型流水线做了<strong>有界并行</strong>,并想清楚了大纲阶段为什么必须留串行;
+    二,为现场演示做了<strong>失败隔离、规则兜底、断连自愈</strong>三层容错;
+    三,把故事结构做成<strong>随生成生长的 3D 故事线</strong>,并解决了节点塌缩与标签重叠的布局难题。
+    我们比的不是功能多,而是<strong>发现问题、做出取舍、拿出结果</strong>的能力。"</p>
+  </div>
+  <div class="footer-num">八 · 叙事红线</div>
+</section>
+
+<!-- 九、叙事优先级排序（评委视角） -->
+<section class="page">
+  <h2 class="sec">九、叙事优先级排序(评委视角)</h2>
+  <p class="sec-sub">评委 15 分钟能记住的就 2–3 件事。赢的不是讲得多,是<strong>讲对顺序</strong>。下面用评委视角给所有量化叙事打分排序。</p>
+
+  <h3>评委到底在用什么打分(5 个维度)</h3>
+  <table>
+    <tr><th style="width:18%">维度</th><th>评委心里的潜台词</th></tr>
+    <tr><td><strong>差异化</strong></td><td>"这点别的组有没有?"—— 能不能跟同质化方案拉开</td></tr>
+    <tr><td><strong>可验证</strong></td><td>"是真的还是 PPT?"—— 能否现场证明 / 复现 / 拿日志</td></tr>
+    <tr><td><strong>工程深度</strong></td><td>"是堆功能还是有判断?"—— 取舍、瓶颈、为什么这么做</td></tr>
+    <tr><td><strong>记忆点</strong></td><td>"散会后我记得住吗?"—— 有没有画面感 / wow</td></tr>
+    <tr><td><strong>易懂</strong></td><td>"非专业评委听得懂吗?"—— 门槛越低越好</td></tr>
+  </table>
+
+  <h3>打分与排序(5 分制,总分 25)</h3>
+  <table style="font-size:11.5px;">
+    <tr><th style="width:30%">叙事</th><th class="num">差异</th><th class="num">验证</th><th class="num">深度</th><th class="num">记忆</th><th class="num">易懂</th><th class="num">总分</th></tr>
+    <tr><td><span class="tag">S</span>可靠性可算成概率(整本成功率 60%→98%,拔网线)</td><td class="num">5</td><td class="num">5</td><td class="num">4</td><td class="num">5</td><td class="num">4</td><td class="num"><strong>23</strong></td></tr>
+    <tr><td><span class="tag">S</span>3D 故事地图 + 去碰撞布局(100→0)</td><td class="num">5</td><td class="num">4</td><td class="num">4</td><td class="num">5</td><td class="num">5</td><td class="num"><strong>23</strong></td></tr>
+    <tr><td><span class="tag">S</span>瓶颈狙击 + 大纲<strong>故意</strong>串行(实测 3.61×)</td><td class="num">4</td><td class="num">5</td><td class="num">5</td><td class="num">3</td><td class="num">4</td><td class="num"><strong>21</strong></td></tr>
+    <tr><td><span class="tag">A</span>建模预测→线上真跑双向印证(元叙事)</td><td class="num">5</td><td class="num">5</td><td class="num">5</td><td class="num">3</td><td class="num">3</td><td class="num"><strong>21</strong></td></tr>
+    <tr><td><span class="tag">A</span>踩坑地图(11 个 fix 分支)</td><td class="num">4</td><td class="num">4</td><td class="num">5</td><td class="num">3</td><td class="num">4</td><td class="num"><strong>20</strong></td></tr>
+    <tr><td><span class="tag">B</span>DB 连接占用 60×(长事务→拆分)</td><td class="num">4</td><td class="num">4</td><td class="num">5</td><td class="num">3</td><td class="num">2</td><td class="num"><strong>18</strong></td></tr>
+    <tr><td><span class="tag">B</span>MQ 异步架构 + 提交 66ms 实测</td><td class="num">3</td><td class="num">5</td><td class="num">4</td><td class="num">3</td><td class="num">3</td><td class="num"><strong>18</strong></td></tr>
+    <tr><td><span class="tag">B</span>真流式 TTFB 17×(感知延迟)</td><td class="num">2</td><td class="num">4</td><td class="num">3</td><td class="num">4</td><td class="num">5</td><td class="num"><strong>18</strong></td></tr>
+  </table>
+
+  <h3>三梯队 + 用在哪</h3>
+  <div class="card">
+    <p style="margin:0 0 5px;"><span class="ok">第一梯队(开场就抛,必讲)</span> ——
+    <strong>① 3D 地图</strong>(demo 一开就是它,抓眼球) →
+    <strong>② 可靠性=可算的概率</strong>(60%→98%,可现场拔网线,最高差异化) →
+    <strong>③ 瓶颈分析 + 大纲故意串行</strong>(实测 3.61×,体现判断力)。三件事讲完,评委已经记住你们了。</p>
+    <p style="margin:5px 0 5px;"><span class="accent">第二梯队(深问时展开,技术评委吃这套)</span> ——
+    <strong>④ DB 连接 60×</strong>("能不能上线扛并发") · <strong>⑤ MQ 异步 + 66ms</strong>(解耦/崩溃恢复)。</p>
+    <p style="margin:5px 0 0;"><span class="danger" style="color:var(--accent-2)">第三梯队(点缀/收口)</span> ——
+    <strong>⑥ 真流式 17×</strong>(demo 顺口一提) · <strong>⑦ 踩坑地图 11 fix</strong>(收口,证明深度与投入)。</p>
+  </div>
+
+  <h3>看人下菜:评委类型适配</h3>
+  <table>
+    <tr><th style="width:22%">评委类型</th><th>优先砸这几条</th></tr>
+    <tr><td><strong>技术 / 架构评委</strong></td><td>瓶颈+故意串行 → DB 连接 60× → MQ 崩溃恢复 → 双向印证方法论。深度越挖越加分。</td></tr>
+    <tr><td><strong>业务 / 产品评委</strong></td><td>3D 地图(看得见)→ 可靠性"拔网线不翻车" → 真流式"等待中内容在长"。讲体感,别堆术语。</td></tr>
+    <tr><td><strong>混合 / 不确定</strong></td><td>走第一梯队三件套:地图(易懂)+ 可靠性(差异)+ 判断力(深度),三个维度全覆盖。</td></tr>
+  </table>
+
+  <div class="card">
+    <div class="lead">如果只剩 30 秒(电梯版,背下来)</div>
+    <p style="margin:0;">"我们做了三件别人没做的事:一,把<strong>稳定性做成了可算的概率</strong> —— 5% 故障率下整本成功率从 60% 提到 98%,可以现场拔网线;二,提速不是无脑加并发,我们<strong>定位了瓶颈、还想清楚大纲为什么必须串行</strong>,场景阶段线上实测 3.61×;三,把故事结构做成<strong>能转动的 3D 星图</strong>,还解决了节点塌缩的布局难题。而且每个数字我们都<strong>建模预测过、也线上真跑验证过</strong>。"</p>
+  </div>
+  <div class="quote">"评委记不住功能,但会记住'稳定能算成概率、提速有判断、可视化有算法'——这三件事按这个顺序讲。"</div>
+
+  <p class="note"><strong>唯一贯穿全程的红线</strong>:每抛一个数字,半句话补上"这是我们<strong>真跑/真算出来的,可复现</strong>"。可信度是把上面所有叙事黏在一起的胶水 —— 它本身不单独占一个名额,但每条都要靠它。</p>
+  <div class="footer-num">九 · 叙事优先级</div>
+</section>
+
+</body>
+</html>

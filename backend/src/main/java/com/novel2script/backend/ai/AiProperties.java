@@ -12,6 +12,8 @@ public class AiProperties {
 
     private final String modelId;
 
+    private final String cheapModelId;
+
     private final int timeoutSeconds;
 
     private final int maxRetries;
@@ -20,12 +22,14 @@ public class AiProperties {
             @Value("${AI_API_KEY:}") String apiKey,
             @Value("${AI_BASE_URL:https://api.openai.com/v1}") String baseUrl,
             @Value("${AI_MODEL_ID:gpt-4.1-mini}") String modelId,
+            @Value("${AI_MODEL_ID_CHEAP:}") String cheapModelId,
             @Value("${AI_TIMEOUT_SECONDS:180}") int timeoutSeconds,
             @Value("${AI_MAX_RETRIES:2}") int maxRetries
     ) {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
         this.modelId = modelId;
+        this.cheapModelId = cheapModelId;
         this.timeoutSeconds = timeoutSeconds;
         this.maxRetries = maxRetries;
     }
@@ -40,6 +44,11 @@ public class AiProperties {
 
     public String getModelId() {
         return modelId;
+    }
+
+    // 结构化、容错高的阶段(摘要/抽取)用的廉价模型。未配置时回退到主模型，保证默认行为不变。
+    public String getCheapModelId() {
+        return (cheapModelId == null || cheapModelId.isBlank()) ? modelId : cheapModelId;
     }
 
     public int getTimeoutSeconds() {
