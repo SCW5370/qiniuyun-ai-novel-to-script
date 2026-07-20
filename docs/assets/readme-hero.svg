@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">Novel to screenplay production board</title>
+  <desc id="desc">A cinematic production board connecting manuscript chapters to structured screenplay scenes.</desc>
+  <rect width="1200" height="520" rx="24" fill="#201a1a"/>
+  <rect x="34" y="34" width="1132" height="452" rx="16" fill="#eee5d6"/>
+  <text x="66" y="80" fill="#5e2427" font-family="Georgia, serif" font-size="18" font-weight="700" letter-spacing="2">STORY PRODUCTION BOARD</text>
+  <text x="988" y="80" fill="#766e63" font-family="monospace" font-size="12">PROJECT 01 / DRAFT</text>
+  <g transform="translate(66 116)">
+    <rect width="210" height="276" rx="8" fill="#fffaf0" stroke="#c9bba7"/>
+    <rect x="18" y="18" width="174" height="42" rx="4" fill="#5e2427"/>
+    <text x="34" y="45" fill="#fffaf0" font-family="Arial, sans-serif" font-size="13" font-weight="700">MANUSCRIPT</text>
+    <text x="18" y="94" fill="#201a1a" font-family="Georgia, serif" font-size="16" font-weight="700">Chapter 07</text>
+    <rect x="18" y="112" width="165" height="7" rx="3" fill="#d8cdbb"/>
+    <rect x="18" y="130" width="150" height="7" rx="3" fill="#d8cdbb"/>
+    <rect x="18" y="148" width="172" height="7" rx="3" fill="#d8cdbb"/>
+    <rect x="18" y="166" width="130" height="7" rx="3" fill="#d8cdbb"/>
+    <text x="18" y="226" fill="#766e63" font-family="Arial, sans-serif" font-size="11">SOURCE LOCKED</text>
+    <text x="18" y="250" fill="#5e2427" font-family="Arial, sans-serif" font-size="13" font-weight="700">12 references</text>
+  </g>
+  <path d="M292 254H358" stroke="#a06046" stroke-width="2" stroke-dasharray="5 6"/>
+  <g transform="translate(374 116)">
+    <rect width="360" height="276" rx="8" fill="#fffaf0" stroke="#c9bba7"/>
+    <text x="20" y="38" fill="#5e2427" font-family="Arial, sans-serif" font-size="12" font-weight="700">STORY ASSETS</text>
+    <g font-family="Arial, sans-serif">
+      <rect x="20" y="64" width="150" height="70" rx="6" fill="#e6d1c1"/><text x="34" y="91" fill="#5e2427" font-size="11">CHARACTERS</text><text x="34" y="116" fill="#201a1a" font-size="18" font-weight="700">08</text>
+      <rect x="190" y="64" width="150" height="70" rx="6" fill="#d7dfd2"/><text x="204" y="91" fill="#385344" font-size="11">LOCATIONS</text><text x="204" y="116" fill="#201a1a" font-size="18" font-weight="700">05</text>
+      <rect x="20" y="154" width="320" height="96" rx="6" fill="#252121"/><text x="36" y="181" fill="#c8bfb1" font-size="11">EVENT 14</text><text x="36" y="210" fill="#fffaf0" font-size="15" font-weight="700">The alliance breaks before sunrise.</text><text x="36" y="232" fill="#c8bfb1" font-size="11">chapter 07 · paragraphs 18—31</text>
+    </g>
+  </g>
+  <path d="M750 254H816" stroke="#a06046" stroke-width="2" stroke-dasharray="5 6"/>
+  <g transform="translate(832 116)">
+    <rect width="268" height="276" rx="8" fill="#252121"/>
+    <text x="20" y="38" fill="#c89a7c" font-family="Arial, sans-serif" font-size="11" font-weight="700">SCENE S014</text>
+    <text x="20" y="73" fill="#fffaf0" font-family="Georgia, serif" font-size="18" font-weight="700">INT. STATION — DAWN</text>
+    <text x="20" y="111" fill="#c8bfb1" font-family="Arial, sans-serif" font-size="12">Action</text>
+    <rect x="20" y="124" width="220" height="7" rx="3" fill="#55504c"/><rect x="20" y="141" width="186" height="7" rx="3" fill="#55504c"/>
+    <text x="20" y="184" fill="#c8bfb1" font-family="Arial, sans-serif" font-size="12">Dialogue</text>
+    <rect x="46" y="198" width="172" height="7" rx="3" fill="#786b63"/><rect x="46" y="215" width="146" height="7" rx="3" fill="#786b63"/>
+    <rect x="20" y="244" width="92" height="22" rx="11" fill="#385344"/><text x="37" y="259" fill="#e5f1e8" font-family="Arial, sans-serif" font-size="10" font-weight="700">VALIDATED</text>
+  </g>
+  <text x="66" y="444" fill="#766e63" font-family="Arial, sans-serif" font-size="12">MANUSCRIPT</text><text x="374" y="444" fill="#766e63" font-family="Arial, sans-serif" font-size="12">EDITABLE ASSETS</text><text x="832" y="444" fill="#766e63" font-family="Arial, sans-serif" font-size="12">PORTABLE SCREENPLAY</text>
+</svg>
